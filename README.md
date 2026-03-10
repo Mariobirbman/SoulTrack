@@ -11,8 +11,7 @@ How to install:
   Ctrl + Z or whatever it is to stop the terminal
 This should install all the necessary files
 4. Under SoleTrack/src/, replace the App.vue with the one in this GitHub and replace main.ts also with the one in the GitHub.
-5. Still under SoleTrack/src, create a styles folder and a views folder
-6. Put the styles.css inside the styles folder and the other .vue files inside views folder.
+5. Put both the styles folder + contents and views folder + contents under SoleTrack/src/
 7. Every time you test, use those three commands
   npm install
   npm install vue-router@4
