@@ -19,7 +19,7 @@ const newShoe = ref('')
 const newSize = ref('')
 const newBuyPrice = ref('')
 const newSellPrice = ref('')
-const newDate = ref(new Date().toISOString().split('T')[0])
+const newDate = ref(new Date().toISOString().slice(0, 10))
 const newPlatform = ref('StockX')
 
 const platforms = ['StockX', 'GOAT', 'eBay', 'Facebook Marketplace', 'Local', 'Other']
@@ -55,7 +55,7 @@ function addSale() {
   })
   save()
   newShoe.value = ''; newSize.value = ''; newBuyPrice.value = ''
-  newSellPrice.value = ''; newDate.value = new Date().toISOString().split('T')[0]
+  newSellPrice.value = ''; newDate.value = new Date().toISOString().slice(0, 10)
   newPlatform.value = 'StockX'; showAddSale.value = false
 }
 
