@@ -1,19 +1,22 @@
 # SoleTrack
 
-How to install:
+## Project location
+The app lives in `soletrack/` (Vue 3 + TypeScript + Vite + Vue Router).
 
-1. Make a folder (name is SoleTrack or whatever)
-2. Open terminal and make sure it is set to SoleTrack folder
-3. Use the following commands:
-  npm create vue@latest
-  npm install
-  npm install vue-router@4
-  npm run dev
-  Ctrl + Z or whatever it is to stop the terminal
-This should install all the necessary files
-5. Under SoleTrack/src/, replace the App.vue with the one in this GitHub and replace main.ts also with the one in the GitHub.
-6. Put both the styles folder + contents and views folder + contents under SoleTrack/src/
-7. Every time you test, use those three commands
-  npm install
-  npm install vue-router@4
-  npm run dev
+## Running locally
+From `soletrack/`:
+- `npm install` (or `npm ci`)
+- `npm run dev`
+
+## If you see `Error: spawn EPERM` (Vite/esbuild)
+On some Windows setups (often with OneDrive/Defender “Controlled folder access” or similar restrictions), Vite/esbuild can fail to spawn its background service.
+
+Common fixes:
+- Move the repo to a non-OneDrive path like `C:\dev\soletrack` and try again.
+- Temporarily disable/whitelist the project for “Controlled folder access”/antivirus.
+- Use Node.js LTS (e.g., Node 20 or 22) instead of Node 24 if your environment is locked down.
+
+## Team workflow (GitHub)
+- Create a branch per change (example: `feature/navbar-mobile`)
+- Open a PR for review
+- Don’t commit secrets (API keys, `.env` files)
