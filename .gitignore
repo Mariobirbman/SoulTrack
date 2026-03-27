@@ -1,0 +1,30 @@
+# Node / JS
+node_modules/
+dist/
+dist-ssr/
+coverage/
+
+# Vite / tooling
+*.local
+*.log
+*.tsbuildinfo
+*.timestamp-*-*.mjs
+.eslintcache
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Local caches / temp
+.npm-cache/
+
+# Workspace artifacts
+**/*._backup_*/
+soletrack/devserver.log
+soletrack/devserver.err.log
