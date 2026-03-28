@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
+import { collection, onSnapshot, orderBy, query } from 'firebase/firestore'
+import { db, firebaseConfigured } from '@/lib/firebase'
 
 interface Vendor {
   id: number
@@ -117,6 +119,34 @@ const vendors = ref<Vendor[]>([
   },
 ])
 
+const loading = ref(false)
+const loadError = ref('')
+
+let stopVendorsListener: (() => void) | null = null
+onMounted(() => {
+  loading.value = true
+  if (!firebaseConfigured || !db) {
+    loadError.value = 'Firebase is not configured (showing demo data).'
+    loading.value = false
+    return
+  }
+  const q = query(collection(db, 'vendors'), orderBy('id'))
+  stopVendorsListener = onSnapshot(
+    q,
+    (snap) => {
+      const remote = snap.docs.map((d) => d.data() as Vendor)
+      if (remote.length) vendors.value = remote
+      loadError.value = ''
+      loading.value = false
+    },
+    () => {
+      loadError.value = 'Could not load vendors from the database (showing demo data).'
+      loading.value = false
+    },
+  )
+})
+onBeforeUnmount(() => stopVendorsListener?.())
+
 const searchQuery = ref('')
 const selectedBadge = ref('All')
 const sortBy = ref('rating')
@@ -203,7 +233,9 @@ const badgeColor: Record<string, string> = {
         </select>
       </div>
 
-      <p class="results-count">{{ filtered.length }} vendor{{ filtered.length !== 1 ? 's' : '' }} found</p>
+      <p class="results-count" v-if="loadError">{{ loadError }}</p>
+      <p class="results-count" v-else-if="loading">Loading vendorsâ€¦</p>
+      <p class="results-count" v-else>{{ filtered.length }} vendor{{ filtered.length !== 1 ? 's' : '' }} found</p>
 
       <!-- Vendor grid -->
       <div class="vendor-grid">

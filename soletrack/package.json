@@ -8,18 +8,23 @@
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
     "build-only": "vite build",
-    "type-check": "vue-tsc --build"
+    "type-check": "vue-tsc --build",
+    "seed:firestore": "node scripts/seed-firestore.mjs"
   },
   "dependencies": {
+    "firebase": "^10.14.1",
     "lenis": "^1.3.19",
+    "papaparse": "^5.5.3",
     "vue": "^3.5.29",
     "vue-router": "^5.0.3"
   },
   "devDependencies": {
     "@tsconfig/node24": "^24.0.4",
     "@types/node": "^24.11.0",
+    "@types/papaparse": "^5.5.2",
     "@vitejs/plugin-vue": "^6.0.4",
     "@vue/tsconfig": "^0.8.1",
+    "firebase-admin": "^12.7.0",
     "npm-run-all2": "^8.0.4",
     "typescript": "~5.9.3",
     "vite": "^7.3.1",

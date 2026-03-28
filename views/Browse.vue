@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
+import { collection, onSnapshot, orderBy, query } from 'firebase/firestore'
+import { db, firebaseConfigured } from '@/lib/firebase'
 
 interface Product {
   id: number
@@ -27,7 +29,7 @@ const products = ref<Product[]>([
     price: 289,
     retailPrice: 180,
     condition: 'DS',
-    image: '/src/assets/Photo of shoes/pexels-jonathanborba-12031204.jpg',
+    image: '/images/shoes/pexels-jonathanborba-12031204.jpg',
     platform: 'StockX',
     colorway: 'Chicago / Red Black',
     sku: '555088-101',
@@ -43,7 +45,7 @@ const products = ref<Product[]>([
     price: 145,
     retailPrice: 110,
     condition: 'New',
-    image: '/src/assets/Photo of shoes/pexels-mohammad-khan-3488802-5470890.jpg',
+    image: '/images/shoes/pexels-mohammad-khan-3488802-5470890.jpg',
     platform: 'GOAT',
     colorway: 'White / Black Panda',
     sku: 'DD1391-100',
@@ -59,7 +61,7 @@ const products = ref<Product[]>([
     price: 320,
     retailPrice: 230,
     condition: 'DS',
-    image: '/src/assets/Photo of shoes/pexels-delot-15467344.jpg',
+    image: '/images/shoes/pexels-delot-15467344.jpg',
     platform: 'StockX',
     colorway: 'Zebra',
     sku: 'CP9654',
@@ -75,7 +77,7 @@ const products = ref<Product[]>([
     price: 410,
     retailPrice: 210,
     condition: 'DS',
-    image: '/src/assets/Photo of shoes/pexels-perfect-lens-15939920.jpg',
+    image: '/images/shoes/pexels-perfect-lens-15939920.jpg',
     platform: 'eBay',
     colorway: 'Military Blue',
     sku: 'DH6927-111',
@@ -91,7 +93,7 @@ const products = ref<Product[]>([
     price: 110,
     retailPrice: 130,
     condition: 'Used',
-    image: '/src/assets/Photo of shoes/pexels-shyam-mishra-203327-13691725.jpg',
+    image: '/images/shoes/pexels-shyam-mishra-203327-13691725.jpg',
     platform: 'Local',
     colorway: 'Infrared',
     sku: 'CT1685-100',
@@ -107,7 +109,7 @@ const products = ref<Product[]>([
     price: 130,
     retailPrice: 110,
     condition: 'New',
-    image: '/src/assets/Photo of shoes/pexels-ahmad-saeed-143458323-10373341.jpg',
+    image: '/images/shoes/pexels-ahmad-saeed-143458323-10373341.jpg',
     platform: 'GOAT',
     colorway: 'White / Green',
     sku: 'BB550WT1',
@@ -123,7 +125,7 @@ const products = ref<Product[]>([
     price: 375,
     retailPrice: 200,
     condition: 'DS',
-    image: '/src/assets/Photo of shoes/pexels-jonathanborba-12031204.jpg',
+    image: '/images/shoes/pexels-jonathanborba-12031204.jpg',
     platform: 'StockX',
     colorway: 'Fire Red',
     sku: 'CT8532-160',
@@ -139,7 +141,7 @@ const products = ref<Product[]>([
     price: 850,
     retailPrice: 150,
     condition: 'DS',
-    image: '/src/assets/Photo of shoes/pexels-mohammad-khan-3488802-5470890.jpg',
+    image: '/images/shoes/pexels-mohammad-khan-3488802-5470890.jpg',
     platform: 'StockX',
     colorway: 'Brown / Sail',
     sku: 'CT5053-200',
@@ -155,7 +157,7 @@ const products = ref<Product[]>([
     price: 290,
     retailPrice: 160,
     condition: 'New',
-    image: '/src/assets/Photo of shoes/pexels-delot-15467344.jpg',
+    image: '/images/shoes/pexels-delot-15467344.jpg',
     platform: 'GOAT',
     colorway: 'Easter Egg',
     sku: 'GW0265',
@@ -164,6 +166,34 @@ const products = ref<Product[]>([
     description: 'Bad Bunny x Forum Low in the Easter Egg colorway. Tried on once for photos. Pristine condition.',
   },
 ])
+
+const loading = ref(false)
+const loadError = ref('')
+
+let stopProductsListener: (() => void) | null = null
+onMounted(() => {
+  loading.value = true
+  if (!firebaseConfigured || !db) {
+    loadError.value = 'Firebase is not configured (showing demo data).'
+    loading.value = false
+    return
+  }
+  const q = query(collection(db, 'products'), orderBy('id'))
+  stopProductsListener = onSnapshot(
+    q,
+    (snap) => {
+      const remote = snap.docs.map((d) => d.data() as Product)
+      if (remote.length) products.value = remote
+      loadError.value = ''
+      loading.value = false
+    },
+    () => {
+      loadError.value = 'Could not load products from the database (showing demo data).'
+      loading.value = false
+    },
+  )
+})
+onBeforeUnmount(() => stopProductsListener?.())
 
 const searchQuery = ref('')
 const selectedBrand = ref('All')
@@ -257,7 +287,9 @@ function profitMargin(p: { price: number; retailPrice: number }) {
       </select>
     </div>
 
-    <p class="results-count">{{ filtered.length }} product{{ filtered.length !== 1 ? 's' : '' }} found</p>
+    <p class="results-count" v-if="loadError">{{ loadError }}</p>
+    <p class="results-count" v-else-if="loading">Loading productsâ€¦</p>
+    <p class="results-count" v-else>{{ filtered.length }} product{{ filtered.length !== 1 ? 's' : '' }} found</p>
 
     <!-- Grid -->
     <div class="product-grid" v-if="filtered.length">

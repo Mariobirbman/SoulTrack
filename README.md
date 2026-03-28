@@ -3,6 +3,14 @@
 ## Project location
 The app lives in `soletrack/` (Vue 3 + TypeScript + Vite + Vue Router).
 
+## Firebase (DB + login)
+The app is wired for Firebase Authentication + Cloud Firestore. Setup guide:
+- `docs/firebase-setup.md`
+
+## Dataset analytics (tables + shoes)
+The global sales CSV is included and rendered on `/analytics`:
+- `docs/dataset-analytics.md`
+
 ## Running locally
 From `soletrack/`:
 - `npm install` (or `npm ci`)

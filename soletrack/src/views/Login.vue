@@ -1,7 +1,15 @@
-
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import {
+  GoogleAuthProvider,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  updateProfile,
+} from 'firebase/auth'
+import { auth, firebaseConfigured } from '@/lib/firebase'
+import { upsertUserProfile } from '@/lib/profile'
 
 const router = useRouter()
 const mode = ref<'login' | 'register'>('login')
@@ -26,15 +34,38 @@ function validateEmail(e: string) {
 function switchMode(m: 'login' | 'register') {
   mode.value = m
   resetMessages()
-  // clear fields when switching
   name.value = ''
   email.value = ''
   password.value = ''
   confirmPassword.value = ''
 }
 
-function register() {
+function authErrorMessage(err: unknown) {
+  const code = (err as { code?: string })?.code || ''
+  switch (code) {
+    case 'auth/invalid-email':
+      return 'Enter a valid email address.'
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return 'Invalid email or password.'
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists.'
+    case 'auth/weak-password':
+      return 'Password is too weak. Use at least 6 characters.'
+    case 'auth/popup-closed-by-user':
+      return 'Sign-in popup was closed.'
+    default:
+      return 'Something went wrong. Please try again.'
+  }
+}
+
+async function register() {
   resetMessages()
+  if (!firebaseConfigured || !auth) {
+    error.value = 'Firebase is not configured yet. Add soletrack/.env.local to enable login.'
+    return
+  }
   if (!name.value.trim()) {
     error.value = 'Name is required'
     return
@@ -52,25 +83,23 @@ function register() {
     return
   }
 
-  const usersRaw = localStorage.getItem('soletrack_users') || '{}'
-  const users = JSON.parse(usersRaw)
-  if (users[email.value]) {
-    error.value = 'An account with this email already exists'
-    return
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email.value, password.value)
+    await updateProfile(cred.user, { displayName: name.value.trim() })
+    await upsertUserProfile(cred.user)
+    success.value = 'Account created — redirecting...'
+    setTimeout(() => router.push('/account'), 400)
+  } catch (err) {
+    error.value = authErrorMessage(err)
   }
-
-  users[email.value] = { name: name.value, password: password.value }
-  localStorage.setItem('soletrack_users', JSON.stringify(users))
-  success.value = 'Registration successful. You can now log in.'
-  // switch to login after registration
-  mode.value = 'login'
-  // prefill email
-  password.value = ''
-  confirmPassword.value = ''
 }
 
-function login() {
+async function login() {
   resetMessages()
+  if (!firebaseConfigured || !auth) {
+    error.value = 'Firebase is not configured yet. Add soletrack/.env.local to enable login.'
+    return
+  }
   if (!validateEmail(email.value)) {
     error.value = 'A valid email is required'
     return
@@ -80,18 +109,31 @@ function login() {
     return
   }
 
-  const usersRaw = localStorage.getItem('soletrack_users') || '{}'
-  const users = JSON.parse(usersRaw)
-  const user = users[email.value]
-  if (!user || user.password !== password.value) {
-    error.value = 'Invalid email or password'
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email.value, password.value)
+    await upsertUserProfile(cred.user)
+    success.value = 'Login successful — redirecting to your account...'
+    setTimeout(() => router.push('/account'), 400)
+  } catch (err) {
+    error.value = authErrorMessage(err)
+  }
+}
+
+async function loginWithGoogle() {
+  resetMessages()
+  if (!firebaseConfigured || !auth) {
+    error.value = 'Firebase is not configured yet. Add soletrack/.env.local to enable login.'
     return
   }
-
-  // set a simple current user marker
-  localStorage.setItem('soletrack_current', JSON.stringify({ email: email.value, name: user.name }))
-  success.value = 'Login successful — redirecting to your account...'
-  setTimeout(() => router.push('/account'), 700)
+  try {
+    const provider = new GoogleAuthProvider()
+    const cred = await signInWithPopup(auth, provider)
+    await upsertUserProfile(cred.user)
+    success.value = 'Login successful — redirecting...'
+    setTimeout(() => router.push('/account'), 300)
+  } catch (err) {
+    error.value = authErrorMessage(err)
+  }
 }
 </script>
 
@@ -106,6 +148,9 @@ function login() {
       <h2 v-if="mode === 'login'">Sign in to your account</h2>
       <h2 v-else>Create a new account</h2>
 
+      <button class="google-btn" type="button" @click="loginWithGoogle">Continue with Google</button>
+      <div class="divider"><span>or</span></div>
+
       <div v-if="mode === 'register'" class="form-row">
         <label for="name">Name</label>
         <input id="name" v-model="name" type="text" autocomplete="name" />
@@ -118,7 +163,7 @@ function login() {
 
       <div class="form-row">
         <label for="password">Password</label>
-        <input id="password" v-model="password" type="password" autocomplete="current-password" />
+        <input id="password" v-model="password" type="password" :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" />
       </div>
 
       <div v-if="mode === 'register'" class="form-row">
@@ -138,3 +183,114 @@ function login() {
   </div>
 </template>
 
+<style scoped>
+.auth-container {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 40px 16px 80px;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.tabs button {
+  flex: 1;
+  background: transparent;
+  border: 1px solid rgba(156, 255, 0, 0.15);
+  color: var(--muted);
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.tabs button.active {
+  color: var(--text);
+  border-color: rgba(156, 255, 0, 0.35);
+  background: rgba(156, 255, 0, 0.06);
+}
+
+.auth-form {
+  background: var(--card);
+  border: 1px solid rgba(156, 255, 0, 0.14);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.auth-form h2 {
+  margin: 0 0 14px;
+  color: var(--text);
+  font-size: 1.1rem;
+}
+
+.google-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(156, 255, 0, 0.25);
+  background: rgba(156, 255, 0, 0.06);
+  color: var(--text);
+  font-weight: 800;
+  cursor: pointer;
+}
+.google-btn:hover { opacity: 0.9; }
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(156, 255, 0, 0.12);
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.form-row label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.form-row input {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.messages { min-height: 22px; }
+.error { color: var(--danger); margin: 8px 0 0; font-size: 0.9rem; }
+.success { color: var(--success); margin: 8px 0 0; font-size: 0.9rem; }
+
+.actions { margin-top: 12px; }
+.actions button {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: #0b1205;
+  font-weight: 900;
+  cursor: pointer;
+}
+</style>

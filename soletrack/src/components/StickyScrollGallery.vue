@@ -19,12 +19,12 @@ onUnmounted(() => {
   lenis?.destroy()
 })
 
-const shoe1 = '/src/assets/Photo of shoes/pexels-jonathanborba-12031204.jpg'
-const shoe2 = '/src/assets/Photo of shoes/pexels-mohammad-khan-3488802-5470890.jpg'
-const shoe3 = '/src/assets/Photo of shoes/pexels-delot-15467344.jpg'
-const shoe4 = '/src/assets/Photo of shoes/pexels-perfect-lens-15939920.jpg'
-const shoe5 = '/src/assets/Photo of shoes/pexels-shyam-mishra-203327-13691725.jpg'
-const shoe6 = '/src/assets/Photo of shoes/pexels-ahmad-saeed-143458323-10373341.jpg'
+const shoe1 = '/images/shoes/pexels-jonathanborba-12031204.jpg'
+const shoe2 = '/images/shoes/pexels-mohammad-khan-3488802-5470890.jpg'
+const shoe3 = '/images/shoes/pexels-delot-15467344.jpg'
+const shoe4 = '/images/shoes/pexels-perfect-lens-15939920.jpg'
+const shoe5 = '/images/shoes/pexels-shyam-mishra-203327-13691725.jpg'
+const shoe6 = '/images/shoes/pexels-ahmad-saeed-143458323-10373341.jpg'
 
 const leftImages = [shoe1, shoe4, shoe2, shoe5, shoe3]
 const middleImages = [shoe6, shoe2, shoe4]

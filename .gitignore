@@ -10,6 +10,7 @@ coverage/
 *.tsbuildinfo
 *.timestamp-*-*.mjs
 .eslintcache
+.firebase/
 
 # OS / editor
 .DS_Store
