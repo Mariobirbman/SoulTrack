@@ -6,6 +6,7 @@ import Login from '@/views/Login.vue'
 import Account from '@/views/Account.vue'
 import Vendors from '@/views/Vendors.vue'
 import NotFound from '@/views/NotFound.vue'
+import Dashboard from '@/views/Dashboard.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -16,7 +17,9 @@ const router = createRouter({
     { path: '/login', component: Login },
     { path: '/account', component: Account },
     { path: '/vendors', component: Vendors },
-    { path: '/:pathMatch(.*)*', component: NotFound },
+    {path: '/dashboard', component: Dashboard},
+    { path: '/:pathMatch(.*)*', component: NotFound }
+    
   ],
 })
 

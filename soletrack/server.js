@@ -28,11 +28,85 @@ app.get('/api/revenue', async (req, res) => {
   }
 })
 
-app.get('/api/models', async (req, res) => {
+app.get('/api/sales-over-time', async (req, res) => {
+  const { brand, year } = req.query
+  try {
+    let query =
+      'SELECT EXTRACT(MONTH FROM sa.sold_time) AS month, SUM(sa.revenue) AS total_revenue ' +
+      'FROM sales sa ' +
+      'JOIN shoe_variants sv ON sv.id = sa.variant_id ' +
+      'JOIN shoes s ON s.id = sv.shoe_id ' +
+      'WHERE 1=1 '
+
+    const params = []
+
+    if (brand) {
+      params.push(brand)
+      query += `AND s.brand = $${params.length} `
+    }
+
+    if (year) {
+      params.push(year)
+      query += `AND EXTRACT(YEAR FROM sa.sold_time) = $${params.length} `
+    }
+
+    query += 'GROUP BY month ORDER BY month'
+
+    const result = await pool.query(query, params)
+    res.json(result.rows)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Internal Server Error' })
+  }
+})
+
+app.get('/api/yearly-sales', async (req, res) => {
+  const { brand } = req.query
+  try {
+    let query =
+      'SELECT EXTRACT(YEAR FROM sa.sold_time) AS year, SUM(sa.revenue) AS total_revenue ' +
+      'FROM sales sa ' +
+      'JOIN shoe_variants sv ON sv.id = sa.variant_id ' +
+      'JOIN shoes s ON s.id = sv.shoe_id ' +
+      'WHERE 1=1 '
+
+    const params = []
+
+    if (brand) {
+      params.push(brand)
+      query += `AND s.brand = $${params.length} `
+    }
+
+    query += 'GROUP BY year ORDER BY year'
+
+    const result = await pool.query(query, params)
+    res.json(result.rows)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Internal Server Error' })
+  }
+})
+
+app.get('/api/stats', async (req, res) => {
+  console.log('Received request for stats')
+  try {
+    const result = await pool.query('SELECT SUM(units_sold) AS total_units_sold, ' + 
+      'AVG(customer_rating) as average_rating, ' +
+      'COUNT(*) as total_orders ' +
+      'FROM sales'
+    )  
+    res.json(result.rows[0])
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Internal Server Error' })
+  }   
+})
+
+app.get('/api/brands', async (req, res) => {
   
   try {
     const result = await pool.query(
-      'SELECT DISTINCT brand FROM shoes order by brand'
+      'SELECT DISTINCT brand FROM shoes ORDER BY brand'
     )
     res.json(result.rows)
   } catch (err) {
