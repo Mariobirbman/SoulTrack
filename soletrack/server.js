@@ -1,6 +1,6 @@
-const express = require('express')
-const cors = require('cors')
-const { Pool } = require('pg')
+import express from 'express'
+import cors from 'cors'
+import { Pool } from 'pg'
 
 const app = express()
 app.use(cors())
