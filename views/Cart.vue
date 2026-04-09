@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useCart } from '@/lib/cart'
+import { useAuth } from '@/lib/auth'
+import { firebaseConfigured } from '@/lib/firebase'
 
 const { items, subtotal, totalCount, remove, setQty, clear } = useCart()
+const { user } = useAuth()
 
 function fmtUSD(n: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
 }
 
 const hasItems = computed(() => items.value.length > 0)
+const checkoutReady = computed(() => firebaseConfigured && hasItems.value)
 </script>
 
 <template>
@@ -57,8 +61,12 @@ const hasItems = computed(() => items.value.length > 0)
           <span class="muted">Subtotal</span>
           <strong>{{ fmtUSD(subtotal) }}</strong>
         </div>
-        <div class="sum-note muted">Checkout is a demo for now (no payment processing yet).</div>
-        <button class="btn primary" disabled>Checkout</button>
+        <div v-if="!firebaseConfigured" class="sum-note muted">Checkout is disabled until Firebase is configured.</div>
+        <div v-else class="sum-note muted">Demo checkout (pickup-style). No real payments.</div>
+
+        <router-link v-if="checkoutReady && user" class="btn primary" to="/checkout">Checkout</router-link>
+        <router-link v-else-if="checkoutReady && !user" class="btn primary" to="/login">Login to checkout</router-link>
+        <button v-else class="btn primary" disabled>Checkout</button>
       </aside>
     </div>
   </div>
@@ -114,4 +122,3 @@ const hasItems = computed(() => items.value.length > 0)
 .empty-icon { font-size: 3rem; margin: 0; }
 .muted { color: var(--muted); }
 </style>
-

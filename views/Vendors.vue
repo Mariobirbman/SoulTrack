@@ -1,123 +1,123 @@
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore'
+import { collection, onSnapshot, query } from 'firebase/firestore'
 import { db, firebaseConfigured } from '@/lib/firebase'
 
 interface Vendor {
-  id: number
+  uid: string
   name: string
-  location: string
-  specialty: string[]
-  rating: number
-  reviewCount: number
-  totalSales: number
-  joinedYear: number
-  badge: string
-  description: string
-  contact: string
-  platforms: string[]
-  minOrder: number
-  topBrands: string[]
+  location?: string
+  specialty?: string[]
+  rating?: number
+  reviewCount?: number
+  badge?: string
+  description?: string
+  contactEmail?: string
+  platforms?: string[]
+  minOrder?: number
+  topBrands?: string[]
 }
 
 const vendors = ref<Vendor[]>([
   {
-    id: 1,
+    uid: '__demo__kickvault',
     name: 'KickVault',
     location: 'Atlanta, GA',
     specialty: ['Jordan', 'Nike SB'],
     rating: 4.9,
     reviewCount: 312,
-    totalSales: 1840,
-    joinedYear: 2019,
     badge: 'Top Seller',
     description: 'One of the most trusted Jordan resellers in the southeast. KickVault specializes in OG colorways, grails, and limited drops. All shoes authenticated before listing.',
-    contact: 'kickvault@soletrack.com',
+    contactEmail: 'kickvault@soletrack.com',
     platforms: ['StockX', 'GOAT', 'eBay'],
     minOrder: 1,
     topBrands: ['Jordan', 'Nike'],
   },
   {
-    id: 2,
+    uid: '__demo__solesource',
     name: 'SoleSource',
     location: 'Los Angeles, CA',
     specialty: ['Nike', 'Adidas'],
     rating: 4.7,
     reviewCount: 198,
-    totalSales: 972,
-    joinedYear: 2020,
     badge: 'Verified',
     description: 'West Coast sneaker connect. Consistent supply of Dunks, Air Force 1s, and Yeezy drops. Ships same day on all confirmed orders.',
-    contact: 'solesource@soletrack.com',
+    contactEmail: 'solesource@soletrack.com',
     platforms: ['GOAT', 'Local', 'Instagram'],
     minOrder: 2,
     topBrands: ['Nike', 'Adidas'],
   },
   {
-    id: 3,
+    uid: '__demo__yzydealer',
     name: 'YZYDealer',
     location: 'Chicago, IL',
     specialty: ['Adidas', 'Yeezy'],
     rating: 4.8,
     reviewCount: 441,
-    totalSales: 3210,
-    joinedYear: 2018,
     badge: 'Top Seller',
     description: 'The go-to source for Yeezy supply. Every colorway since 2018, in most sizes. Bulk deals available for flippers. No fakes — every pair verified.',
-    contact: 'yzydealer@soletrack.com',
+    contactEmail: 'yzydealer@soletrack.com',
     platforms: ['StockX', 'eBay'],
     minOrder: 1,
     topBrands: ['Adidas'],
   },
   {
-    id: 4,
+    uid: '__demo__retroracks',
     name: 'RetroRacks',
     location: 'New York, NY',
     specialty: ['Jordan', 'Nike Retro'],
     rating: 4.6,
     reviewCount: 127,
-    totalSales: 620,
-    joinedYear: 2021,
     badge: 'Verified',
     description: 'Specializing in retro Jordan 3s, 4s, and 5s. RetroRacks keeps inventory lean and quality high. Great source for resellers focused on classic silhouettes.',
-    contact: 'retrorack@soletrack.com',
+    contactEmail: 'retrorack@soletrack.com',
     platforms: ['eBay', 'StockX', 'Local'],
     minOrder: 1,
     topBrands: ['Jordan'],
   },
   {
-    id: 5,
+    uid: '__demo__cactuskicks',
     name: 'CactusKicks',
     location: 'Houston, TX',
     specialty: ['Travis Scott Collab', 'Nike SB'],
     rating: 5.0,
     reviewCount: 76,
-    totalSales: 284,
-    joinedYear: 2022,
     badge: 'New',
     description: 'Boutique vendor specializing in high-heat collabs. Travis Scott, Off-White, and other designer collaborations. Limited supply, serious buyers only.',
-    contact: 'cactuskicks@soletrack.com',
+    contactEmail: 'cactuskicks@soletrack.com',
     platforms: ['StockX', 'GOAT'],
     minOrder: 1,
     topBrands: ['Nike', 'Jordan'],
   },
   {
-    id: 6,
+    uid: '__demo__nbvault',
     name: 'NB Vault',
     location: 'Boston, MA',
     specialty: ['New Balance', 'Saucony'],
     rating: 4.5,
     reviewCount: 89,
-    totalSales: 415,
-    joinedYear: 2021,
     badge: 'Verified',
     description: 'The best NB connect in New England. Stocking 550s, 990s, 993s, and more. Also carries limited Saucony drops. Wholesale pricing for bulk buyers.',
-    contact: 'nbvault@soletrack.com',
+    contactEmail: 'nbvault@soletrack.com',
     platforms: ['GOAT', 'Local'],
     minOrder: 3,
     topBrands: ['New Balance', 'Saucony'],
   },
 ])
+
+const copiedEmail = ref<string | null>(null)
+async function copyEmail(email: string) {
+  copiedEmail.value = null
+  try {
+    await navigator.clipboard.writeText(email)
+    copiedEmail.value = email
+    window.setTimeout(() => {
+      if (copiedEmail.value === email) copiedEmail.value = null
+    }, 1400)
+  } catch {
+    // ignore
+  }
+}
 
 const loading = ref(false)
 const loadError = ref('')
@@ -130,11 +130,11 @@ onMounted(() => {
     loading.value = false
     return
   }
-  const q = query(collection(db, 'vendors'), orderBy('id'))
+  const q = query(collection(db, 'vendors'))
   stopVendorsListener = onSnapshot(
     q,
     (snap) => {
-      const remote = snap.docs.map((d) => d.data() as Vendor)
+      const remote = snap.docs.map((d) => ({ uid: d.id, ...(d.data() as Omit<Vendor, 'uid'>) }))
       if (remote.length) vendors.value = remote
       loadError.value = ''
       loading.value = false
@@ -156,21 +156,21 @@ const badgeOptions = ['All', 'Top Seller', 'Verified', 'New']
 const filtered = computed(() => {
   let list = vendors.value.filter(v => {
     const matchSearch = v.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-                        v.location.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-                        v.specialty.some(s => s.toLowerCase().includes(searchQuery.value.toLowerCase()))
+                        String(v.location ?? '').toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+                        (v.specialty ?? []).some(s => s.toLowerCase().includes(searchQuery.value.toLowerCase()))
     const matchBadge = selectedBadge.value === 'All' || v.badge === selectedBadge.value
     return matchSearch && matchBadge
   })
 
-  if (sortBy.value === 'rating') list = [...list].sort((a, b) => b.rating - a.rating)
-  if (sortBy.value === 'sales') list = [...list].sort((a, b) => b.totalSales - a.totalSales)
-  if (sortBy.value === 'reviews') list = [...list].sort((a, b) => b.reviewCount - a.reviewCount)
+  if (sortBy.value === 'rating') list = [...list].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
+  if (sortBy.value === 'reviews') list = [...list].sort((a, b) => (b.reviewCount ?? 0) - (a.reviewCount ?? 0))
   if (sortBy.value === 'name') list = [...list].sort((a, b) => a.name.localeCompare(b.name))
 
   return list
 })
 
-function stars(rating: number) {
+function stars(rating?: number) {
+  if (!rating) return ''
   return '★'.repeat(Math.floor(rating)) + (rating % 1 >= 0.5 ? '½' : '')
 }
 
@@ -179,6 +179,14 @@ const badgeColor: Record<string, string> = {
   'Verified': 'var(--success)',
   'New': 'var(--muted)',
 }
+
+const verifiedCount = computed(() => vendors.value.filter((v) => v.badge === 'Verified').length)
+const topSellerCount = computed(() => vendors.value.filter((v) => v.badge === 'Top Seller').length)
+const avgRating = computed(() => {
+  const list = vendors.value.map((v) => v.rating).filter((r): r is number => typeof r === 'number' && r > 0)
+  if (!list.length) return 0
+  return list.reduce((a, r) => a + r, 0) / list.length
+})
 </script>
 
 <template>
@@ -201,15 +209,15 @@ const badgeColor: Record<string, string> = {
           <span class="vstat-label">Active Vendors</span>
         </div>
         <div class="vstat">
-          <span class="vstat-value">{{ vendors.reduce((a, v) => a + v.totalSales, 0).toLocaleString() }}</span>
-          <span class="vstat-label">Total Sales</span>
+          <span class="vstat-value">{{ verifiedCount }}</span>
+          <span class="vstat-label">Verified</span>
         </div>
         <div class="vstat">
-          <span class="vstat-value">{{ vendors.filter(v => v.badge === 'Top Seller').length }}</span>
+          <span class="vstat-value">{{ topSellerCount }}</span>
           <span class="vstat-label">Top Sellers</span>
         </div>
         <div class="vstat">
-          <span class="vstat-value">{{ (vendors.reduce((a, v) => a + v.rating, 0) / vendors.length).toFixed(1) }}★</span>
+          <span class="vstat-value">{{ avgRating ? avgRating.toFixed(1) : '0.0' }}★</span>
           <span class="vstat-label">Avg Rating</span>
         </div>
       </div>
@@ -217,77 +225,86 @@ const badgeColor: Record<string, string> = {
       <!-- Filters -->
       <div class="filters">
         <input
+          id="vendors-search"
+          name="vendorsSearch"
           v-model="searchQuery"
           class="search-input"
           type="text"
           placeholder="Search vendors, cities, brands..."
         />
-        <select v-model="selectedBadge" class="filter-select">
+        <select id="vendors-badge" name="vendorsBadge" v-model="selectedBadge" class="filter-select">
           <option v-for="b in badgeOptions" :key="b">{{ b }}</option>
         </select>
-        <select v-model="sortBy" class="filter-select">
+        <select id="vendors-sort" name="vendorsSort" v-model="sortBy" class="filter-select">
           <option value="rating">Top Rated</option>
-          <option value="sales">Most Sales</option>
           <option value="reviews">Most Reviews</option>
           <option value="name">Name A-Z</option>
         </select>
       </div>
 
       <p class="results-count" v-if="loadError">{{ loadError }}</p>
-      <p class="results-count" v-else-if="loading">Loading vendorsâ€¦</p>
+      <p class="results-count" v-else-if="loading">Loading vendors...</p>
       <p class="results-count" v-else>{{ filtered.length }} vendor{{ filtered.length !== 1 ? 's' : '' }} found</p>
 
       <!-- Vendor grid -->
       <div class="vendor-grid">
-        <div class="vendor-card" v-for="v in filtered" :key="v.id">
+        <div class="vendor-card" v-for="v in filtered" :key="v.uid">
 
           <div class="vendor-card-header">
             <div class="vendor-avatar">{{ v.name[0] }}</div>
             <div class="vendor-title-block">
               <div class="vendor-name-row">
                 <h3 class="vendor-name">{{ v.name }}</h3>
-                <span class="vendor-badge" :style="{ color: badgeColor[v.badge], borderColor: badgeColor[v.badge] }">
+                <span v-if="v.badge" class="vendor-badge" :style="{ color: badgeColor[v.badge], borderColor: badgeColor[v.badge] }">
                   {{ v.badge }}
                 </span>
               </div>
-              <p class="vendor-location">📍 {{ v.location }}</p>
+              <p v-if="v.location" class="vendor-location">📍 {{ v.location }}</p>
             </div>
           </div>
 
-          <div class="vendor-rating-row">
+          <div v-if="v.rating" class="vendor-rating-row">
             <span class="stars">{{ stars(v.rating) }}</span>
             <span class="rating-num">{{ v.rating }}</span>
-            <span class="review-count">({{ v.reviewCount }} reviews)</span>
+            <span v-if="v.reviewCount != null" class="review-count">({{ v.reviewCount }} reviews)</span>
           </div>
 
-          <p class="vendor-desc">{{ v.description }}</p>
+          <p v-if="v.description" class="vendor-desc">{{ v.description }}</p>
 
           <div class="vendor-meta-grid">
-            <div class="vmeta">
-              <span class="vmeta-label">Total Sales</span>
-              <span class="vmeta-value">{{ v.totalSales.toLocaleString() }}</span>
+            <div class="vmeta" v-if="v.reviewCount != null">
+              <span class="vmeta-label">Reviews</span>
+              <span class="vmeta-value">{{ v.reviewCount }}</span>
             </div>
-            <div class="vmeta">
-              <span class="vmeta-label">Since</span>
-              <span class="vmeta-value">{{ v.joinedYear }}</span>
-            </div>
-            <div class="vmeta">
+            <div class="vmeta" v-if="v.minOrder != null">
               <span class="vmeta-label">Min Order</span>
               <span class="vmeta-value">{{ v.minOrder }} pair{{ v.minOrder !== 1 ? 's' : '' }}</span>
             </div>
+            <div class="vmeta" v-if="v.platforms?.length">
+              <span class="vmeta-label">Platforms</span>
+              <span class="vmeta-value">{{ v.platforms.length }}</span>
+            </div>
           </div>
 
-          <div class="vendor-tags-row">
+          <div class="vendor-tags-row" v-if="v.topBrands?.length">
             <span class="tag brand-tag" v-for="b in v.topBrands" :key="b">{{ b }}</span>
           </div>
 
-          <div class="vendor-platforms">
+          <div class="vendor-platforms" v-if="v.platforms?.length">
             <span class="platform-tag" v-for="pl in v.platforms" :key="pl">{{ pl }}</span>
           </div>
 
           <div class="vendor-footer">
-            <router-link to="/login" class="btn primary">Contact Vendor</router-link>
-            <a :href="`mailto:${v.contact}`" class="btn">Email</a>
+            <router-link :to="`/vendor/${v.uid}`" class="btn primary">Visit shop</router-link>
+            <button
+              v-if="v.contactEmail"
+              type="button"
+              class="btn"
+              @click="copyEmail(v.contactEmail)"
+              :title="v.contactEmail"
+            >
+              {{ copiedEmail === v.contactEmail ? 'Copied' : 'Copy email' }}
+            </button>
           </div>
 
         </div>

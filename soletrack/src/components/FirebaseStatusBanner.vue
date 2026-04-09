@@ -1,16 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { firebaseConfigured } from '@/lib/firebase'
+import { demoMode, firebaseConfigured } from '@/lib/firebase'
 
 const show = computed(() => !firebaseConfigured)
 </script>
 
 <template>
   <div v-if="show" class="banner" role="status">
-    <strong>Firebase not configured.</strong>
-    Add <code>soletrack/.env.local</code> to enable login + database.
-    <span class="sep">•</span>
-    See <code>docs/firebase-setup.md</code>.
+    <template v-if="demoMode">
+      <strong>Demo mode enabled.</strong>
+      Your account/vendor data is stored only in this browser.
+    </template>
+    <template v-else>
+      <strong>Firebase not configured.</strong>
+      Add <code>soletrack/.env.local</code> to enable login + database.
+      <span class="sep">•</span>
+      See <code>docs/firebase-setup.md</code>.
+    </template>
   </div>
 </template>
 
@@ -36,4 +42,3 @@ code {
 }
 .sep { margin: 0 8px; color: rgba(255,255,255,0.35); }
 </style>
-

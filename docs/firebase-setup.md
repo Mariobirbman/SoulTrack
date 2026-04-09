@@ -3,6 +3,7 @@
 This project uses:
 - Firebase Authentication (email/password + Google)
 - Cloud Firestore for `products`, `vendors`, and per-user `sales`
+ - Demo marketplace checkout via `vendorOrders` + per-order chat via `vendorOrders/{orderId}/messages`
 
 ## 1) Create Firebase project
 1. Go to Firebase Console and create a project.
@@ -12,6 +13,10 @@ This project uses:
 In **Authentication** -> **Sign-in method**:
 - Enable **Email/Password**
 - Enable **Google**
+
+In **Authentication** -> **Settings** -> **Authorized domains**:
+- Make sure your domain is listed (for local dev, `localhost` is typical).
+- If you see `auth/unauthorized-domain` when using Google sign-in, add the current hostname (for example `127.0.0.1` or a custom domain you deployed to).
 
 ## 3) Create Firestore database
 In **Firestore Database**:
@@ -28,10 +33,27 @@ npm run dev
 
 ## 5) Create collections (recommended shape)
 
+### Marketplace (vendors + listings + demo checkout)
+The marketplace flow (Sell → Browse → Cart → Checkout) uses:
+- `vendors/{vendorUid}` (doc id == Firebase Auth uid)
+- `products/{productId}` (must include `vendorUid` + `vendorName`)
+- `vendorOrders/{vendorOrderId}` (one doc per vendor at checkout time)
+- `vendorOrders/{vendorOrderId}/messages/{messageId}` (per-order chat)
+
+The easiest way to generate correct documents is to use the app UI:
+- vendor: go to `/sell` and create your vendor profile + add sample listings
+- buyer: go to `/browse` → add to cart → `/checkout`
+
 ### `products` (public read)
-Documents should include an `id` number field because the UI uses numeric IDs right now.
+Documents should include:
+- `vendorUid` (string, owner uid)
+- `vendorName` (string, shop name snapshot)
+
+Optional (recommended for listings):
+- `active` (boolean)
+- `createdAt` / `updatedAt` (server timestamps)
+
 Example fields:
-- `id` (number)
 - `name` (string)
 - `brand` (string)
 - `size` (string)
@@ -47,22 +69,13 @@ Example fields:
 - `description` (string)
 
 ### `vendors` (public read)
-Documents should include an `id` number field.
+Document id should be the vendor's auth uid (the app writes this for you).
 Example fields:
-- `id` (number)
 - `name` (string)
 - `location` (string)
-- `specialty` (string[])
-- `rating` (number)
-- `reviewCount` (number)
-- `totalSales` (number)
-- `joinedYear` (number)
-- `badge` (string)
 - `description` (string)
-- `contact` (string)
-- `platforms` (string[])
 - `minOrder` (number)
-- `topBrands` (string[])
+ - `contactEmail` (string)
 
 ### `users/{uid}/sales` (private per user)
 Created automatically from the Account page:
@@ -76,7 +89,8 @@ Created automatically from the Account page:
 
 ## 6) Security rules
 This repo includes `firestore.rules` at the repo root:
-- `products` and `vendors` are public read, client write is admin-only via custom claims.
+- `products` and `vendors` are public read, client write is vendor-owned (auth uid).
+- `vendorOrders` are readable by the buyer and the vendor; they are write-once demo orders.
 - `users/{uid}` and `users/{uid}/sales` are user-private.
 
 If you deploy rules, make sure you understand and review them first.

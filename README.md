@@ -28,3 +28,11 @@ Common fixes:
 - Create a branch per change (example: `feature/navbar-mobile`)
 - Open a PR for review
 - Don’t commit secrets (API keys, `.env` files)
+
+## Optional: Antigravity skills
+If you use Antigravity skills in your local AI tooling, see:
+- `docs/antigravity-skills.md`
+
+## Production + audit
+- `docs/production-checklist.md`
+- `docs/site-audit.md`

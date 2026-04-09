@@ -48,7 +48,12 @@ function safeAvg(sum: number, count: number) {
   return count ? sum / count : 0
 }
 
+// Module-level cache so navigating away and back doesn't re-download 4MB
+const _cache = new Map<string, SalesOrderRow[]>()
+
 export async function loadSalesOrdersCsv(url: string): Promise<SalesOrderRow[]> {
+  if (_cache.has(url)) return _cache.get(url)!
+
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Failed to fetch dataset: ${res.status}`)
   const csv = await res.text()
@@ -91,6 +96,7 @@ export async function loadSalesOrdersCsv(url: string): Promise<SalesOrderRow[]> 
             } satisfies SalesOrderRow
           })
 
+        _cache.set(url, rows)
         resolve(rows)
       },
       error: (err: Error) => reject(err),

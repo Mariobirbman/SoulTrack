@@ -1,28 +1,25 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Home from '@/views/Home.vue'
-import Browse from '@/views/Browse.vue'
-import About from '@/views/About.vue'
-import Login from '@/views/Login.vue'
-import Account from '@/views/Account.vue'
-import Vendors from '@/views/Vendors.vue'
-import Analytics from '@/views/Analytics.vue'
-import Cart from '@/views/Cart.vue'
-import NotFound from '@/views/NotFound.vue'
 import { useAuth } from '@/lib/auth'
 import { firebaseConfigured } from '@/lib/firebase'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/', component: Home },
-    { path: '/browse', component: Browse },
-    { path: '/about', component: About },
-    { path: '/login', component: Login },
-    { path: '/account', component: Account, meta: { requiresAuth: true } },
-    { path: '/vendors', component: Vendors },
-    { path: '/analytics', component: Analytics },
-    { path: '/cart', component: Cart },
-    { path: '/:pathMatch(.*)*', component: NotFound },
+    { path: '/', component: () => import('../views/Home.vue') },
+    { path: '/browse', component: () => import('../views/Browse.vue') },
+    { path: '/about', component: () => import('../views/About.vue') },
+    { path: '/login', component: () => import('../views/Login.vue') },
+    { path: '/account', component: () => import('../views/Account.vue'), meta: { requiresAuth: true } },
+    { path: '/vendors', component: () => import('../views/Vendors.vue') },
+    { path: '/vendor/:uid', component: () => import('../views/VendorShop.vue') },
+    { path: '/analytics', component: () => import('../views/Analytics.vue') },
+    { path: '/cart', component: () => import('../views/Cart.vue') },
+    { path: '/checkout', component: () => import('../views/Checkout.vue'), meta: { requiresAuth: true } },
+    { path: '/orders', component: () => import('../views/Orders.vue'), meta: { requiresAuth: true } },
+    { path: '/order/:id', component: () => import('../views/OrderDetail.vue'), meta: { requiresAuth: true } },
+    { path: '/sell', component: () => import('../views/Sell.vue'), meta: { requiresAuth: true } },
+    { path: '/vendor-orders', component: () => import('../views/VendorOrders.vue'), meta: { requiresAuth: true } },
+    { path: '/:pathMatch(.*)*', component: () => import('../views/NotFound.vue') },
   ],
 })
 
@@ -32,8 +29,8 @@ router.beforeEach(async (to) => {
   const { user, ready } = useAuth()
   await ready
 
-  if (to.path === '/login' && user.value) return '/account'
-  if (to.meta.requiresAuth && !user.value) return '/login'
+  if (to.path === '/login' && user.value) return (typeof to.query.next === 'string' ? to.query.next : '/account')
+  if (to.meta.requiresAuth && !user.value) return { path: '/login', query: { next: to.fullPath } }
 })
 
 export default router

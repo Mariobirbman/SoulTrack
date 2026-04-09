@@ -1,8 +1,14 @@
-import type { User } from 'firebase/auth'
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from './firebase'
 
-export async function upsertUserProfile(user: User) {
+type UserLike = {
+  uid: string
+  email?: string | null
+  displayName?: string | null
+  photoURL?: string | null
+}
+
+export async function upsertUserProfile(user: UserLike) {
   if (!db) return
   await setDoc(
     doc(db, 'users', user.uid),

@@ -6,13 +6,15 @@ export type CartItem = {
   price: number
   qty: number
   image?: string
+  vendorUid?: string
+  vendorName?: string
 }
 
-const STORAGE_KEY = 'soletrack_cart_v1'
+const STORAGE_KEY = 'soletrack_cart_v2'
+const LEGACY_KEY = 'soletrack_cart_v1'
 
 function loadCart(): CartItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+  const parse = (raw: string | null): CartItem[] => {
     if (!raw) return []
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
@@ -24,7 +26,20 @@ function loadCart(): CartItem[] {
         price: Number(x.price ?? 0),
         qty: Math.max(1, Number(x.qty ?? 1)),
         image: x.image ? String(x.image) : undefined,
+        vendorUid: typeof x.vendorUid === 'string' ? String(x.vendorUid) : undefined,
+        vendorName: typeof x.vendorName === 'string' ? String(x.vendorName) : undefined,
       }))
+  }
+
+  try {
+    const v2 = parse(localStorage.getItem(STORAGE_KEY))
+    if (v2.length) return v2
+    const v1 = parse(localStorage.getItem(LEGACY_KEY))
+    if (v1.length) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(v1))
+      localStorage.removeItem(LEGACY_KEY)
+    }
+    return v1
   } catch {
     return []
   }
@@ -52,6 +67,8 @@ export function useCart() {
       existing.price = item.price
       existing.name = item.name
       existing.image = item.image
+      existing.vendorUid = item.vendorUid
+      existing.vendorName = item.vendorName
       return
     }
     items.value.push({ ...item, qty: q })
@@ -74,4 +91,3 @@ export function useCart() {
 
   return { items, totalCount, subtotal, add, remove, setQty, clear }
 }
-

@@ -4,6 +4,7 @@ import type { Auth } from 'firebase/auth'
 import { getAuth, connectAuthEmulator } from 'firebase/auth'
 import type { Firestore } from 'firebase/firestore'
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore'
+import { isDemoMode } from './demo'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -14,7 +15,16 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 }
 
-export const firebaseConfigured = Object.values(firebaseConfig).every((v) => typeof v === 'string' && v.length > 0)
+function looksLikePlaceholder(v: string) {
+  const needles = ['your_api_key', 'your_project', 'your_project_id', 'your_sender_id', 'your_app_id']
+  return needles.some((n) => v.includes(n))
+}
+
+export const demoMode = isDemoMode()
+
+export const firebaseConfigured = !demoMode && Object.values(firebaseConfig).every(
+  (v) => typeof v === 'string' && v.length > 0 && !looksLikePlaceholder(v),
+)
 
 export const firebaseApp: FirebaseApp | null = firebaseConfigured
   ? (getApps().length ? getApps()[0]! : initializeApp(firebaseConfig))

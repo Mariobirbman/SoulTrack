@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import StickyScrollGallery from '@/components/StickyScrollGallery.vue'
+import MarqueeTicker from '@/components/MarqueeTicker.vue'
+import heroImage1 from '@/assets/hero-1.webp'
+import heroImage2 from '@/assets/hero-2.webp'
 
-const images = [
-  '/src/assets/Hero Image.png',
-  '/src/assets/HeroImage2newusethis.png',
-]
+const router = useRouter()
+const searchText = ref('')
+const images = [heroImage1, heroImage2]
 
 const currentIndex = ref(0)
 const fading = ref(false)
@@ -26,6 +29,11 @@ onMounted(() => {
   }, 4000)
 })
 onUnmounted(() => clearInterval(timer))
+
+function submitSearch() {
+  const q = searchText.value.trim()
+  router.push({ path: '/browse', query: q ? { q } : {} })
+}
 </script>
 
 <template>
@@ -43,16 +51,17 @@ onUnmounted(() => clearInterval(timer))
         <router-link class="btn" to="/browse">Browse products</router-link>
       </div>
 
-      <form class="homeSearch" @submit.prevent>
+      <form class="homeSearch" @submit.prevent="submitSearch">
         <label class="homeSearch__label" for="searchInput" >Search</label>
         <div class="homeSearch__row">
-          <input id="searchInput" class="homeSearch__input" type="text" placeholder="Search..." />
+          <input id="searchInput" v-model="searchText" class="homeSearch__input" type="text" placeholder="Search..." />
           <button class="homeSearch__button primary" type="submit">Search</button>
         </div>
       </form>
     </div>
   </section>
 
+  <MarqueeTicker />
   <StickyScrollGallery />
 </template>
 
@@ -61,6 +70,9 @@ onUnmounted(() => clearInterval(timer))
   min-height: 70vh;
   height: auto;
   padding: 56px 0 24px;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .hero_Content {
@@ -244,6 +256,38 @@ onUnmounted(() => clearInterval(timer))
 @media (max-width: 520px) {
   .homeSearch__row {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .hero {
+    min-height: 100svh;
+    padding: 72px 0 32px;
+  }
+
+  .homeTitle {
+    font-size: clamp(28px, 8vw, 40px);
+  }
+
+  .homeSubtitle {
+    font-size: 0.9rem;
+    padding: 0 8px;
+  }
+
+  .homeCtas {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0 16px;
+  }
+
+  .homeCtas .btn {
+    text-align: center;
+    justify-content: center;
+  }
+
+  .homeSearch {
+    padding: 0 16px;
+    max-width: 100%;
   }
 }
 </style>

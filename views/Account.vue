@@ -4,8 +4,10 @@ import { useRouter } from 'vue-router'
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { useAuth } from '@/lib/auth'
-import { auth, db, firebaseConfigured } from '@/lib/firebase'
+import { auth, db, demoMode, firebaseConfigured } from '@/lib/firebase'
 import { upsertUserProfile } from '@/lib/profile'
+import { disableDemoMode } from '@/lib/demo'
+import { addDemoSale, deleteDemoSale, getOrSeedDemoSales } from '@/lib/demoStore'
 
 const router = useRouter()
 
@@ -39,6 +41,11 @@ let stopSalesListener: (() => void) | null = null
 onMounted(() => {
   ;(async () => {
     await ready
+    if (demoMode) {
+      sales.value = getOrSeedDemoSales()
+      loading.value = false
+      return
+    }
     if (!firebaseConfigured || !auth || !db) {
       loading.value = false
       formError.value = 'Firebase is not configured yet. Add soletrack/.env.local to enable account sales.'
@@ -78,6 +85,24 @@ async function addSale() {
   if (!newSize.value.trim()) { formError.value = 'Size is required'; return }
   if (!newBuyPrice.value || isNaN(+newBuyPrice.value)) { formError.value = 'Enter a valid buy price'; return }
   if (!newSellPrice.value || isNaN(+newSellPrice.value)) { formError.value = 'Enter a valid sell price'; return }
+  if (demoMode) {
+    sales.value = addDemoSale({
+      shoe: newShoe.value.trim(),
+      size: newSize.value.trim(),
+      buyPrice: parseFloat(newBuyPrice.value),
+      sellPrice: parseFloat(newSellPrice.value),
+      date: newDate.value,
+      platform: newPlatform.value,
+    })
+    newShoe.value = ''
+    newSize.value = ''
+    newBuyPrice.value = ''
+    newSellPrice.value = ''
+    newDate.value = new Date().toISOString().slice(0, 10)
+    newPlatform.value = 'StockX'
+    showAddSale.value = false
+    return
+  }
   if (!user.value) { router.push('/login'); return }
   if (!db) { formError.value = 'Database not available.'; return }
 
@@ -106,6 +131,10 @@ async function addSale() {
 }
 
 async function deleteSale(id: string) {
+  if (demoMode) {
+    sales.value = deleteDemoSale(id)
+    return
+  }
   if (!user.value) { router.push('/login'); return }
   try {
     if (!db) return
@@ -129,6 +158,11 @@ const projectedProfit = computed(() => {
 })
 
 async function logout() {
+  if (demoMode) {
+    disableDemoMode()
+    window.location.assign('/login')
+    return
+  }
   if (auth) await signOut(auth)
   router.push('/login')
 }

@@ -1,17 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
+  getRedirectResult,
   signInWithEmailAndPassword,
+  signInWithRedirect,
   signInWithPopup,
   updateProfile,
 } from 'firebase/auth'
 import { auth, firebaseConfigured } from '@/lib/firebase'
 import { upsertUserProfile } from '@/lib/profile'
+import { disableDemoMode, enableDemoMode, isDemoMode } from '@/lib/demo'
+
+const demoActive = ref(isDemoMode())
 
 const router = useRouter()
+const route = useRoute()
 const mode = ref<'login' | 'register'>('login')
 
 const name = ref('')
@@ -21,6 +27,11 @@ const confirmPassword = ref('')
 
 const error = ref('')
 const success = ref('')
+
+const isLikelyInAppBrowser = computed(() => {
+  const ua = navigator.userAgent || ''
+  return /FBAN|FBAV|Instagram|Line|TikTok|Snapchat|LinkedInApp|Twitter|wv\b/i.test(ua)
+})
 
 function resetMessages() {
   error.value = ''
@@ -42,7 +53,15 @@ function switchMode(m: 'login' | 'register') {
 
 function authErrorMessage(err: unknown) {
   const code = (err as { code?: string })?.code || ''
+  const host =
+    typeof window !== 'undefined' && window.location?.hostname ? window.location.hostname : ''
   switch (code) {
+    case 'auth/invalid-api-key':
+      return 'Firebase API key is invalid. Update soletrack/.env.local and redeploy.'
+    case 'auth/unauthorized-domain':
+      return `This domain${host ? ` (${host})` : ''} is not authorized for Google sign-in. Add it in Firebase Console → Authentication → Settings → Authorized domains.`
+    case 'auth/operation-not-allowed':
+      return 'This sign-in method is disabled in Firebase. Enable Email/Password and Google in Firebase Console → Authentication → Sign-in method.'
     case 'auth/invalid-email':
       return 'Enter a valid email address.'
     case 'auth/user-not-found':
@@ -53,12 +72,49 @@ function authErrorMessage(err: unknown) {
       return 'An account with this email already exists.'
     case 'auth/weak-password':
       return 'Password is too weak. Use at least 6 characters.'
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Wait a bit and try again.'
+    case 'auth/network-request-failed':
+      return 'Network error. Check your connection and try again.'
+    case 'auth/popup-blocked':
+      return 'Your browser blocked the sign-in popup. Try “Continue with Google (redirect)”.'
     case 'auth/popup-closed-by-user':
       return 'Sign-in popup was closed.'
+    case 'auth/cancelled-popup-request':
+      return 'Another sign-in popup is already open. Close it and try again.'
+    case 'auth/account-exists-with-different-credential':
+      return 'An account already exists with this email using a different sign-in method. Try signing in with the original method, then link Google from your account.'
     default:
-      return 'Something went wrong. Please try again.'
+      return `Something went wrong${code ? ` (${code})` : ''}. Please try again.`
   }
 }
+
+function nextPath() {
+  return typeof route.query.next === 'string' && route.query.next ? route.query.next : '/account'
+}
+
+function enterDemoMode() {
+  enableDemoMode()
+  window.location.assign(nextPath())
+}
+
+function exitDemoMode() {
+  disableDemoMode()
+  window.location.assign('/login')
+}
+
+onMounted(async () => {
+  if (!firebaseConfigured || !auth) return
+  try {
+    const result = await getRedirectResult(auth)
+    if (!result?.user) return
+    await upsertUserProfile(result.user)
+    success.value = 'Login successful — redirecting...'
+    setTimeout(() => router.push(nextPath()), 300)
+  } catch (err) {
+    error.value = authErrorMessage(err)
+  }
+})
 
 async function register() {
   resetMessages()
@@ -88,7 +144,7 @@ async function register() {
     await updateProfile(cred.user, { displayName: name.value.trim() })
     await upsertUserProfile(cred.user)
     success.value = 'Account created — redirecting...'
-    setTimeout(() => router.push('/account'), 400)
+    setTimeout(() => router.push(nextPath()), 400)
   } catch (err) {
     error.value = authErrorMessage(err)
   }
@@ -113,7 +169,7 @@ async function login() {
     const cred = await signInWithEmailAndPassword(auth, email.value, password.value)
     await upsertUserProfile(cred.user)
     success.value = 'Login successful — redirecting to your account...'
-    setTimeout(() => router.push('/account'), 400)
+    setTimeout(() => router.push(nextPath()), 400)
   } catch (err) {
     error.value = authErrorMessage(err)
   }
@@ -127,10 +183,26 @@ async function loginWithGoogle() {
   }
   try {
     const provider = new GoogleAuthProvider()
+    provider.setCustomParameters({ prompt: 'select_account' })
     const cred = await signInWithPopup(auth, provider)
     await upsertUserProfile(cred.user)
     success.value = 'Login successful — redirecting...'
-    setTimeout(() => router.push('/account'), 300)
+    setTimeout(() => router.push(nextPath()), 300)
+  } catch (err) {
+    error.value = authErrorMessage(err)
+  }
+}
+async function loginWithGoogleRedirect() {
+  resetMessages()
+  if (!firebaseConfigured || !auth) {
+    error.value = 'Firebase is not configured yet. Add soletrack/.env.local to enable login.'
+    return
+  }
+  try {
+    success.value = 'Redirecting to Google...'
+    const provider = new GoogleAuthProvider()
+    provider.setCustomParameters({ prompt: 'select_account' })
+    await signInWithRedirect(auth, provider)
   } catch (err) {
     error.value = authErrorMessage(err)
   }
@@ -139,6 +211,19 @@ async function loginWithGoogle() {
 
 <template>
   <div class="auth-container">
+    <div class="demo-callout">
+      <div class="demo-copy">
+        <strong>Presentation mode</strong>
+        <span class="demo-sub">Use a fake user + mock data (no real email needed).</span>
+      </div>
+      <button v-if="!demoActive" class="btnDemo" type="button" @click="enterDemoMode">
+        Continue as demo user
+      </button>
+      <button v-else class="btnDemo" type="button" @click="exitDemoMode">
+        Exit demo mode
+      </button>
+    </div>
+
     <div class="tabs">
       <button :class="{active: mode === 'login'}" @click="switchMode('login')">Login</button>
       <button :class="{active: mode === 'register'}" @click="switchMode('register')">Register</button>
@@ -149,6 +234,12 @@ async function loginWithGoogle() {
       <h2 v-else>Create a new account</h2>
 
       <button class="google-btn" type="button" @click="loginWithGoogle">Continue with Google</button>
+      <p v-if="isLikelyInAppBrowser" class="hint">
+        Google sign-in is blocked in some in-app browsers. Open this page in Chrome/Safari, or use redirect sign-in below.
+      </p>
+      <button class="google-btn secondary" type="button" @click="loginWithGoogleRedirect">
+        Continue with Google (redirect)
+      </button>
       <div class="divider"><span>or</span></div>
 
       <div v-if="mode === 'register'" class="form-row">
@@ -184,6 +275,29 @@ async function loginWithGoogle() {
 </template>
 
 <style scoped>
+.demo-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(156, 255, 0, 0.14);
+  background: rgba(156, 255, 0, 0.04);
+  margin-bottom: 12px;
+}
+.demo-copy { display: grid; gap: 2px; }
+.demo-sub { color: var(--muted); font-size: 0.85rem; }
+.btnDemo {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(156, 255, 0, 0.22);
+  background: rgba(156, 255, 0, 0.10);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 800;
+}
+.btnDemo:hover { background: rgba(156, 255, 0, 0.14); }
 .auth-container {
   max-width: 520px;
   margin: 0 auto;
@@ -239,7 +353,14 @@ async function loginWithGoogle() {
   font-weight: 800;
   cursor: pointer;
 }
+.google-btn.secondary {
+  margin-top: 10px;
+  background: transparent;
+  border: 1px solid rgba(156, 255, 0, 0.2);
+  color: var(--muted);
+}
 .google-btn:hover { opacity: 0.9; }
+.hint { margin: 10px 0 0; color: var(--muted); font-size: 0.85rem; line-height: 1.5; }
 
 .divider {
   display: flex;

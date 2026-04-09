@@ -1,0 +1,274 @@
+export type DemoVendor = {
+  uid: string
+  name: string
+  location?: string
+  specialty?: string[]
+  rating?: number
+  reviewCount?: number
+  badge?: string
+  description?: string
+  contactEmail?: string
+  platforms?: string[]
+  minOrder?: number
+  topBrands?: string[]
+}
+
+export type DemoProduct = {
+  id: string
+  vendorUid: string
+  vendorName: string
+  name: string
+  brand: string
+  size?: string
+  price: number
+  retailPrice?: number
+  condition?: 'New' | 'Used' | 'DS'
+  image?: string
+  platform?: string
+  colorway?: string
+  sku?: string
+  soldCount?: number
+  description?: string
+}
+
+export const demoVendors: DemoVendor[] = [
+  {
+    uid: '__demo__kickvault',
+    name: 'KickVault',
+    location: 'Atlanta, GA',
+    specialty: ['Jordan', 'Nike SB'],
+    rating: 4.9,
+    reviewCount: 312,
+    badge: 'Top Seller',
+    description:
+      'One of the most trusted Jordan resellers in the southeast. KickVault specializes in OG colorways, grails, and limited drops. All shoes authenticated before listing.',
+    contactEmail: 'kickvault@soletrack.com',
+    platforms: ['StockX', 'GOAT', 'eBay'],
+    minOrder: 1,
+    topBrands: ['Jordan', 'Nike'],
+  },
+  {
+    uid: '__demo__solesource',
+    name: 'SoleSource',
+    location: 'Los Angeles, CA',
+    specialty: ['Nike', 'Adidas'],
+    rating: 4.7,
+    reviewCount: 198,
+    badge: 'Verified',
+    description:
+      'West Coast sneaker connect. Consistent supply of Dunks, Air Force 1s, and Yeezy drops. Ships same day on all confirmed orders.',
+    contactEmail: 'solesource@soletrack.com',
+    platforms: ['GOAT', 'Local', 'Instagram'],
+    minOrder: 2,
+    topBrands: ['Nike', 'Adidas'],
+  },
+  {
+    uid: '__demo__yzydealer',
+    name: 'YZYDealer',
+    location: 'Chicago, IL',
+    specialty: ['Adidas', 'Yeezy'],
+    rating: 4.8,
+    reviewCount: 441,
+    badge: 'Top Seller',
+    description:
+      'The go-to source for Yeezy supply. Every colorway since 2018, in most sizes. Bulk deals available for flippers. No fakes — every pair verified.',
+    contactEmail: 'yzydealer@soletrack.com',
+    platforms: ['StockX', 'eBay'],
+    minOrder: 1,
+    topBrands: ['Adidas'],
+  },
+  {
+    uid: '__demo__retroracks',
+    name: 'RetroRacks',
+    location: 'New York, NY',
+    specialty: ['Jordan', 'Nike Retro'],
+    rating: 4.6,
+    reviewCount: 127,
+    badge: 'Verified',
+    description:
+      'Specializing in retro Jordan 3s, 4s, and 5s. RetroRacks keeps inventory lean and quality high. Great source for resellers focused on classic silhouettes.',
+    contactEmail: 'retrorack@soletrack.com',
+    platforms: ['eBay', 'StockX', 'Local'],
+    minOrder: 1,
+    topBrands: ['Jordan'],
+  },
+  {
+    uid: '__demo__cactuskicks',
+    name: 'CactusKicks',
+    location: 'Houston, TX',
+    specialty: ['Travis Scott Collab', 'Nike SB'],
+    rating: 5.0,
+    reviewCount: 76,
+    badge: 'New',
+    description:
+      'Boutique vendor specializing in high-heat collabs. Travis Scott, Off-White, and other designer collaborations. Limited supply, serious buyers only.',
+    contactEmail: 'cactuskicks@soletrack.com',
+    platforms: ['StockX', 'GOAT'],
+    minOrder: 1,
+    topBrands: ['Nike', 'Jordan'],
+  },
+  {
+    uid: '__demo__nbvault',
+    name: 'NB Vault',
+    location: 'Boston, MA',
+    specialty: ['New Balance', 'Saucony'],
+    rating: 4.5,
+    reviewCount: 89,
+    badge: 'Verified',
+    description:
+      'The best NB connect in New England. Stocking 550s, 990s, 993s, and more. Also carries limited Saucony drops. Wholesale pricing for bulk buyers.',
+    contactEmail: 'nbvault@soletrack.com',
+    platforms: ['GOAT', 'Local'],
+    minOrder: 3,
+    topBrands: ['New Balance', 'Saucony'],
+  },
+]
+
+export const demoProducts: DemoProduct[] = [
+  {
+    id: 'demo-1',
+    name: 'Air Jordan 1 Retro High OG',
+    brand: 'Jordan',
+    size: '10',
+    price: 289,
+    retailPrice: 180,
+    condition: 'DS',
+    image: 'https://images.unsplash.com/photo-aDZ5YIuedQg?w=600&q=80&auto=format&fit=crop',
+    platform: 'StockX',
+    colorway: 'Chicago / Red Black',
+    sku: '555088-101',
+    vendorUid: '__demo__kickvault',
+    vendorName: 'KickVault',
+    soldCount: 142,
+    description:
+      'The iconic AJ1 High OG in classic colorway. Deadstock, never worn. Original box included with all accessories.',
+  },
+  {
+    id: 'demo-2',
+    name: 'Nike Dunk Low Retro',
+    brand: 'Nike',
+    size: '9.5',
+    price: 145,
+    retailPrice: 110,
+    condition: 'New',
+    image: 'https://images.unsplash.com/photo-g1vk_Bef2Xk?w=600&q=80&auto=format&fit=crop',
+    platform: 'GOAT',
+    colorway: 'White / Black Panda',
+    sku: 'DD1391-100',
+    vendorUid: '__demo__solesource',
+    vendorName: 'SoleSource',
+    soldCount: 87,
+    description: 'Clean Panda Dunk Low. Tried on once indoors. No creases, no dirt. Box slightly dented.',
+  },
+  {
+    id: 'demo-3',
+    name: 'Adidas Yeezy Boost 350 V2',
+    brand: 'Adidas',
+    size: '11',
+    price: 320,
+    retailPrice: 230,
+    condition: 'DS',
+    image: 'https://images.unsplash.com/photo-hVlyfxnH56k?w=600&q=80&auto=format&fit=crop',
+    platform: 'StockX',
+    colorway: 'Zebra',
+    sku: 'CP9654',
+    vendorUid: '__demo__yzydealer',
+    vendorName: 'YZYDealer',
+    soldCount: 205,
+    description: 'Zebra 350 V2 — one of the most sought-after Yeezy colorways. Deadstock with original receipt.',
+  },
+  {
+    id: 'demo-4',
+    name: 'Jordan 4 Retro Military Blue',
+    brand: 'Jordan',
+    size: '10.5',
+    price: 410,
+    retailPrice: 210,
+    condition: 'DS',
+    image: 'https://images.unsplash.com/photo-F45w1xY42BY?w=600&q=80&auto=format&fit=crop',
+    platform: 'eBay',
+    colorway: 'Military Blue',
+    sku: 'DH6927-111',
+    vendorUid: '__demo__retroracks',
+    vendorName: 'RetroRacks',
+    soldCount: 63,
+    description: 'Clean Military Blue 4 — DS with box and extra laces.',
+  },
+  {
+    id: 'demo-5',
+    name: 'Nike Air Max 90',
+    brand: 'Nike',
+    size: '9',
+    price: 110,
+    retailPrice: 130,
+    condition: 'Used',
+    image: 'https://images.unsplash.com/photo-Ao1AP2UvVnE?w=600&q=80&auto=format&fit=crop',
+    platform: 'Local',
+    colorway: 'Infrared',
+    sku: 'CT1685-100',
+    vendorUid: '__demo__solesource',
+    vendorName: 'SoleSource',
+    soldCount: 31,
+    description: 'Light use, still clean. Minor sole yellowing. Great daily beater.',
+  },
+  {
+    id: 'demo-6',
+    name: 'New Balance 550 White Green',
+    brand: 'New Balance',
+    size: '10',
+    price: 130,
+    retailPrice: 110,
+    condition: 'New',
+    image: 'https://images.unsplash.com/photo-3bBihBr7wRE?w=600&q=80&auto=format&fit=crop',
+    platform: 'GOAT',
+    colorway: 'White / Green',
+    sku: 'BB550WT1',
+    vendorUid: '__demo__nbvault',
+    vendorName: 'NB Vault',
+    soldCount: 54,
+    description: 'Crispy 550 colorway. Brand new, never worn. Original box and paper.',
+  },
+  {
+    id: 'demo-7',
+    name: 'Air Jordan 3 Retro Fire Red',
+    brand: 'Jordan',
+    size: '11',
+    price: 375,
+    retailPrice: 200,
+    condition: 'DS',
+    image: 'https://images.unsplash.com/photo-bIrDx0cAr14?w=600&q=80&auto=format&fit=crop',
+    platform: 'StockX',
+    colorway: 'Fire Red',
+    sku: 'CT8532-160',
+    vendorUid: '__demo__kickvault',
+    vendorName: 'KickVault',
+    soldCount: 98,
+    description: 'Fire Red 3 — elephant print sharp, DS with box.',
+  },
+  {
+    id: 'demo-8',
+    name: 'Nike SB Dunk Low (Special Release)',
+    brand: 'Nike',
+    size: '10',
+    price: 850,
+    retailPrice: 150,
+    condition: 'DS',
+    image: 'https://images.unsplash.com/photo-sA5wcAu4CBA?w=600&q=80&auto=format&fit=crop',
+    platform: 'StockX',
+    colorway: 'Brown / Sail',
+    sku: 'CT5053-200',
+    vendorUid: '__demo__cactuskicks',
+    vendorName: 'CactusKicks',
+    soldCount: 19,
+    description: 'Limited SB release. DS, never worn. Ships double boxed.',
+  },
+]
+
+export function demoVendorByUid(uid: string) {
+  return demoVendors.find((v) => v.uid === uid) ?? null
+}
+
+export function demoProductsForVendor(uid: string) {
+  return demoProducts.filter((p) => p.vendorUid === uid)
+}
+
