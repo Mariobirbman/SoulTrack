@@ -328,7 +328,7 @@ async function addSampleListings() {
         size: '10',
         price: 165,
         condition: 'New',
-        image: '/images/shoes/generated-11.webp',
+        image: 'https://images.unsplash.com/photo-g1vk_Bef2Xk?w=600&q=80&auto=format&fit=crop',
         description: 'Clean, ready for pickup. Box included.',
       },
       {
@@ -337,7 +337,7 @@ async function addSampleListings() {
         size: '10.5',
         price: 305,
         condition: 'DS',
-        image: '/images/shoes/generated-12.webp',
+        image: 'https://images.unsplash.com/photo-aDZ5YIuedQg?w=600&q=80&auto=format&fit=crop',
         description: 'Deadstock, never worn. Local pickup only.',
       },
       {
@@ -346,7 +346,7 @@ async function addSampleListings() {
         size: '9.5',
         price: 140,
         condition: 'New',
-        image: '/images/shoes/generated-06.webp',
+        image: 'https://images.unsplash.com/photo-3bBihBr7wRE?w=600&q=80&auto=format&fit=crop',
         description: 'Brand new pair. Great starter flip.',
       },
     ]

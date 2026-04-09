@@ -92,6 +92,18 @@ const checkoutReady = computed(() => firebaseConfigured && hasItems.value)
   background: rgba(255,255,255,0.02);
 }
 .row:last-child { border-bottom: none; }
+
+@media (max-width: 600px) {
+  .row {
+    grid-template-columns: 60px 1fr 36px;
+    grid-template-rows: auto auto;
+  }
+  .img { width: 60px; height: 48px; grid-row: 1 / 3; }
+  .meta { grid-column: 2; grid-row: 1; }
+  .qty { grid-column: 2; grid-row: 2; flex-direction: row; align-items: center; }
+  .line { display: none; }
+  .remove { grid-column: 3; grid-row: 1; }
+}
 .img { width: 76px; height: 56px; object-fit: cover; border-radius: 12px; border: 1px solid rgba(156, 255, 0, 0.10); }
 .meta { min-width: 0; }
 .name { color: var(--text); font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

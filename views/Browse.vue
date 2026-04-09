@@ -190,7 +190,7 @@ onMounted(() => {
     loading.value = false
     return
   }
-  const q = query(collection(db, 'products'))
+  const q = query(collection(db, 'products'), where('active', '!=', false))
   stopProductsListener = onSnapshot(
     q,
     (snap) => {
