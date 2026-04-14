@@ -12,9 +12,10 @@ import {
 } from 'firebase/auth'
 import { auth, firebaseConfigured } from '@/lib/firebase'
 import { upsertUserProfile } from '@/lib/profile'
-import { disableDemoMode, enableDemoMode, isDemoMode } from '@/lib/demo'
+import { disableDemoMode, enableDemoAdminMode, enableDemoMode, isDemoAdmin, isDemoMode } from '@/lib/demo'
 
 const demoActive = ref(isDemoMode())
+const demoIsAdmin = ref(isDemoAdmin())
 
 const router = useRouter()
 const route = useRoute()
@@ -93,9 +94,14 @@ function nextPath() {
   return typeof route.query.next === 'string' && route.query.next ? route.query.next : '/account'
 }
 
-function enterDemoMode() {
+function enterDemoUser() {
   enableDemoMode()
   window.location.assign(nextPath())
+}
+
+function enterDemoAdmin() {
+  enableDemoAdminMode()
+  window.location.assign('/admin')
 }
 
 function exitDemoMode() {
@@ -213,15 +219,25 @@ async function loginWithGoogleRedirect() {
   <div class="auth-container">
     <div class="demo-callout">
       <div class="demo-copy">
-        <strong>Presentation mode</strong>
-        <span class="demo-sub">Use a fake user + mock data (no real email needed).</span>
+        <strong>Demo Mode</strong>
+        <span class="demo-sub">No account needed — pick a role and explore.</span>
       </div>
-      <button v-if="!demoActive" class="btnDemo" type="button" @click="enterDemoMode">
-        Continue as demo user
-      </button>
-      <button v-else class="btnDemo" type="button" @click="exitDemoMode">
-        Exit demo mode
-      </button>
+      <div v-if="!demoActive" class="demo-btns">
+        <button class="btnDemo user" type="button" @click="enterDemoUser">
+          Login as User
+        </button>
+        <button class="btnDemo admin" type="button" @click="enterDemoAdmin">
+          Login as Admin
+        </button>
+      </div>
+      <div v-else class="demo-active-row">
+        <span class="demo-role-tag" :class="demoIsAdmin ? 'admin' : 'user'">
+          {{ demoIsAdmin ? 'Admin' : 'User' }} demo active
+        </span>
+        <button class="btnDemo exit" type="button" @click="exitDemoMode">
+          Exit demo
+        </button>
+      </div>
     </div>
 
     <div class="tabs">
@@ -288,16 +304,33 @@ async function loginWithGoogleRedirect() {
 }
 .demo-copy { display: grid; gap: 2px; }
 .demo-sub { color: var(--muted); font-size: 0.85rem; }
+.demo-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.demo-active-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.demo-role-tag {
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 6px;
+  letter-spacing: 0.04em;
+}
+.demo-role-tag.admin { background: rgba(156,255,0,0.12); color: var(--accent); border: 1px solid rgba(156,255,0,0.3); }
+.demo-role-tag.user  { background: rgba(100,180,255,0.12); color: #7ecfff; border: 1px solid rgba(100,180,255,0.3); }
+
 .btnDemo {
-  padding: 10px 12px;
+  padding: 10px 14px;
   border-radius: 10px;
   border: 1px solid rgba(156, 255, 0, 0.22);
   background: rgba(156, 255, 0, 0.10);
   color: var(--text);
   cursor: pointer;
   font-weight: 800;
+  font-size: 0.88rem;
+  white-space: nowrap;
 }
-.btnDemo:hover { background: rgba(156, 255, 0, 0.14); }
+.btnDemo.user  { border-color: rgba(100,180,255,0.3); background: rgba(100,180,255,0.08); }
+.btnDemo.admin { border-color: rgba(156,255,0,0.3);   background: rgba(156,255,0,0.10); }
+.btnDemo.exit  { border-color: rgba(255,80,80,0.3);   background: rgba(255,80,80,0.06);  color: var(--danger); }
+.btnDemo:hover { opacity: 0.85; }
 .auth-container {
   max-width: 520px;
   margin: 0 auto;

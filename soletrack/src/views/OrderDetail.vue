@@ -9,6 +9,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  updateDoc,
 } from 'firebase/firestore'
 import { useAuth } from '@/lib/auth'
 import { db, firebaseConfigured } from '@/lib/firebase'
@@ -68,6 +69,38 @@ function fmtUSD(n: number) {
 
 const isVendorView = computed(() => !!user.value && !!order.value && user.value.uid === order.value.vendorUid)
 const backLink = computed(() => (isVendorView.value ? '/vendor-orders' : '/orders'))
+
+const STATUS_STEPS = ['placed', 'accepted', 'ready', 'picked_up'] as const
+const STATUS_LABELS: Record<string, string> = {
+  placed: 'Order Placed',
+  accepted: 'Accepted by Vendor',
+  ready: 'Ready for Pickup',
+  picked_up: 'Picked Up',
+}
+const STATUS_NEXT_LABEL: Record<string, string> = {
+  placed: 'Accept Order',
+  accepted: 'Mark Ready for Pickup',
+  ready: 'Mark as Picked Up',
+}
+
+const currentStepIndex = computed(() => STATUS_STEPS.indexOf((order.value?.status ?? 'placed') as any))
+const nextStatus = computed<string | null>(() => STATUS_STEPS[currentStepIndex.value + 1] ?? null)
+
+const advancing = ref(false)
+const advanceError = ref('')
+
+async function advanceStatus() {
+  if (!firebaseConfigured || !db || !user.value || !order.value || !nextStatus.value) return
+  advancing.value = true
+  advanceError.value = ''
+  try {
+    await updateDoc(doc(db, 'vendorOrders', id.value), { status: nextStatus.value })
+  } catch {
+    advanceError.value = 'Could not update order status. Please try again.'
+  } finally {
+    advancing.value = false
+  }
+}
 
 onMounted(() => {
   ;(async () => {
@@ -153,6 +186,34 @@ async function send() {
     <div v-else-if="loading" class="notice muted">Loading order...</div>
 
     <template v-else-if="order">
+      <!-- Status timeline -->
+      <section class="panel status-panel">
+        <div class="status-header">
+          <h2 class="panel-title" style="margin:0">Order Status</h2>
+          <span class="status-chip" :class="order.status">{{ STATUS_LABELS[order.status] ?? order.status }}</span>
+        </div>
+
+        <div class="timeline">
+          <div
+            v-for="(step, i) in STATUS_STEPS"
+            :key="step"
+            class="step"
+            :class="{ done: i <= currentStepIndex, active: i === currentStepIndex }"
+          >
+            <div class="step-dot"></div>
+            <div class="step-label">{{ STATUS_LABELS[step] }}</div>
+          </div>
+          <div class="step-line"></div>
+        </div>
+
+        <div v-if="isVendorView && nextStatus" class="advance-row">
+          <div v-if="advanceError" class="adv-error">{{ advanceError }}</div>
+          <button class="btn primary" :disabled="advancing" @click="advanceStatus">
+            {{ advancing ? 'Updating…' : STATUS_NEXT_LABEL[order.status] }}
+          </button>
+        </div>
+      </section>
+
       <div class="grid">
         <section class="panel">
           <h2 class="panel-title">Items</h2>
@@ -254,6 +315,77 @@ async function send() {
 .kv { display: grid; grid-template-columns: 130px 1fr; gap: 10px; }
 .k { color: var(--muted); font-size: 0.82rem; }
 .v { color: var(--text); font-weight: 700; }
+
+/* Status timeline */
+.status-panel { margin-bottom: 16px; }
+.status-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+
+.status-chip {
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(156, 255, 0, 0.25);
+  color: var(--accent);
+  background: rgba(156, 255, 0, 0.06);
+  white-space: nowrap;
+}
+.status-chip.placed   { border-color: rgba(100,180,255,0.3); color: #7ecfff; background: rgba(100,180,255,0.07); }
+.status-chip.accepted { border-color: rgba(255,180,0,0.3);   color: #f5a623; background: rgba(255,180,0,0.07); }
+.status-chip.ready    { border-color: rgba(156,255,0,0.3);   color: var(--accent); background: rgba(156,255,0,0.07); }
+.status-chip.picked_up { border-color: rgba(80,220,120,0.3); color: var(--success); background: rgba(80,220,120,0.07); }
+
+.timeline {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  padding-bottom: 6px;
+}
+.step-line {
+  position: absolute;
+  top: 11px;
+  left: 12.5%;
+  right: 12.5%;
+  height: 2px;
+  background: rgba(255,255,255,0.08);
+  z-index: 0;
+}
+.step {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.step-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.15);
+  background: var(--card);
+  transition: background 0.2s, border-color 0.2s;
+}
+.step.done .step-dot {
+  border-color: var(--accent);
+  background: rgba(156, 255, 0, 0.18);
+}
+.step.active .step-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.step-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.3;
+}
+.step.done .step-label { color: var(--text); font-weight: 700; }
+.step.active .step-label { color: var(--accent); font-weight: 900; }
+
+.advance-row { margin-top: 14px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.adv-error { font-size: 0.85rem; color: var(--danger); }
 
 .chat { margin-top: 16px; }
 .messages { max-height: 320px; overflow: auto; display: grid; gap: 8px; padding: 4px; }

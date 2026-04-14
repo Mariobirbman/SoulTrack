@@ -9,6 +9,11 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function isAdmin() {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     // Vendors are user-owned profiles (doc id == vendor's auth uid).
     match /vendors/{vendorUid} {
       allow read: if true;
@@ -17,27 +22,50 @@ service cloud.firestore {
     }
 
     // Public product listings, owned by a vendor user (vendorUid).
+    // Vendors can create/delete their own listings and update non-status fields.
+    // Only admins can change the 'status' field (approved / rejected).
     match /products/{productId} {
       allow read: if true;
-      allow create: if signedIn() && request.resource.data.vendorUid == request.auth.uid;
+
+      allow create: if signedIn()
+        && request.resource.data.vendorUid == request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      // Vendor update: must own the product, cannot change vendorUid or status
       allow update: if signedIn()
         && resource.data.vendorUid == request.auth.uid
-        && request.resource.data.vendorUid == request.auth.uid;
+        && request.resource.data.vendorUid == request.auth.uid
+        && request.resource.data.status == resource.data.status;
+
+      // Admin update: can change any field including status
+      allow update: if isAdmin();
+
       allow delete: if signedIn() && resource.data.vendorUid == request.auth.uid;
     }
 
     // Demo checkout: one vendor-order per vendor at checkout time.
     match /vendorOrders/{orderId} {
       allow read: if signedIn()
-        && (resource.data.buyerUid == request.auth.uid || resource.data.vendorUid == request.auth.uid);
+        && (resource.data.buyerUid == request.auth.uid
+          || resource.data.vendorUid == request.auth.uid);
 
       allow create: if signedIn()
         && request.resource.data.buyerUid == request.auth.uid
         && request.resource.data.vendorUid is string
         && request.resource.data.checkoutId is string
-        && request.resource.data.items is list;
+        && request.resource.data.items is list
+        && request.resource.data.status == 'placed';
 
-      allow update, delete: if false;
+      // Only the vendor can advance the order status; no other fields may change.
+      allow update: if signedIn()
+        && resource.data.vendorUid == request.auth.uid
+        && request.resource.data.buyerUid == resource.data.buyerUid
+        && request.resource.data.vendorUid == resource.data.vendorUid
+        && request.resource.data.checkoutId == resource.data.checkoutId
+        && request.resource.data.items == resource.data.items
+        && request.resource.data.subtotal == resource.data.subtotal;
+
+      allow delete: if false;
 
       // Per-order chat between buyer and vendor.
       match /messages/{messageId} {
@@ -55,14 +83,20 @@ service cloud.firestore {
       }
     }
 
+    // Aggregated analytics written by admin when approving products.
+    match /analyticsData/{monthDoc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // User profiles + per-user sales.
     match /users/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow create, update: if request.auth != null && request.auth.uid == uid;
+      allow read: if isSelf(uid) || isAdmin();
+      allow create, update: if isSelf(uid);
       allow delete: if false;
 
       match /sales/{saleId} {
-        allow read, create, update, delete: if request.auth != null && request.auth.uid == uid;
+        allow read, create, update, delete: if isSelf(uid);
       }
     }
   }

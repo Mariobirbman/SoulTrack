@@ -499,12 +499,22 @@ async function addSampleListings() {
           </div>
         </div>
 
+        <div v-if="products.some(p => p.status === 'pending')" class="notice pending-notice">
+          You have listings awaiting admin review. They will not appear on Browse until approved.
+        </div>
+
         <div class="list" v-if="products.length">
           <div class="item" v-for="p in products" :key="p.id">
             <img class="thumb" :src="p.image || '/images/shoes/pexels-jonathanborba-12031204.jpg'" :alt="p.name" />
             <div class="meta">
               <div class="name">{{ p.name }}</div>
               <div class="muted">{{ p.brand || '—' }} · {{ p.size || '—' }} · ${{ p.price }}</div>
+              <div v-if="p.status === 'pending'" class="pending-hint">
+                Awaiting admin approval — not visible to shoppers yet.
+              </div>
+              <div v-if="p.status === 'rejected'" class="rejected-hint">
+                Rejected by admin. Edit and resubmit, or contact support.
+              </div>
             </div>
             <div class="right">
               <span class="status-badge" :class="p.status || 'approved'">
@@ -563,6 +573,10 @@ async function addSampleListings() {
 .notice { border-radius: 12px; padding: 10px 12px; border: 1px solid; margin: 10px 0; }
 .notice.error { border-color: rgba(255,50,50,0.35); color: var(--danger); background: rgba(255,50,50,0.06); }
 .notice.ok { border-color: rgba(80,220,120,0.35); color: var(--success); background: rgba(80,220,120,0.06); }
+.pending-notice { border-color: rgba(255,180,0,0.3); color: #f5a623; background: rgba(255,180,0,0.05); margin-top: 10px; }
+
+.pending-hint { font-size: 0.78rem; color: #f5a623; margin-top: 3px; }
+.rejected-hint { font-size: 0.78rem; color: var(--danger); margin-top: 3px; }
 
 .form { display: grid; gap: 10px; }
 .row { display: grid; gap: 6px; }

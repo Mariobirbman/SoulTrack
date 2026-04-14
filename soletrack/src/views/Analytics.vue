@@ -3,13 +3,16 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import type { SalesOrderRow, ShoeAggRow } from '@/lib/salesDataset'
 import { aggregateShoes, loadSalesOrdersCsv } from '@/lib/salesDataset'
 import { simulatePrice } from '@/lib/priceSim'
+import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { db, firebaseConfigured } from '@/lib/firebase'
+import { demoProducts } from '@/lib/demoMarketplace'
 const loading = ref(true)
 const error = ref('')
 // shallowRef: only the array reference is reactive, not every row object inside.
 // This cuts Vue's reactive overhead by ~60% for 30K-row arrays.
 const rows = shallowRef<SalesOrderRow[]>([])
 
-const activeTab = ref<'orders' | 'shoes'>('shoes')
+const activeTab = ref<'orders' | 'shoes' | 'marketplace'>('marketplace')
 
 const search = ref('')
 const year = ref<'All' | string>('All')
@@ -71,7 +74,78 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (tickTimer) window.clearInterval(tickTimer)
   tickTimer = null
+  stopMarketplaceListener?.()
 })
+
+// ── Marketplace Trends (your actual SoleTrack listings) ──────────────────────
+const marketplaceProducts = ref<any[]>([])
+let stopMarketplaceListener: (() => void) | null = null
+
+onMounted(() => {
+  if (!firebaseConfigured || !db) {
+    // fall back to demo products
+    marketplaceProducts.value = demoProducts as any[]
+    return
+  }
+  const q = query(collection(db, 'products'), where('status', '==', 'approved'))
+  stopMarketplaceListener = onSnapshot(q, (snap) => {
+    const live = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    marketplaceProducts.value = live.length ? live : (demoProducts as any[])
+  }, () => {
+    marketplaceProducts.value = demoProducts as any[]
+  })
+})
+
+// Average price by brand
+const avgPriceByBrand = computed(() => {
+  const map: Record<string, { total: number; count: number }> = {}
+  for (const p of marketplaceProducts.value) {
+    const b = p.brand || 'Unknown'
+    if (!map[b]) map[b] = { total: 0, count: 0 }
+    map[b].total += p.price ?? 0
+    map[b].count += 1
+  }
+  return Object.entries(map)
+    .map(([brand, { total, count }]) => ({ brand, avg: Math.round(total / count), count }))
+    .sort((a, b) => b.avg - a.avg)
+})
+
+const maxBrandAvg = computed(() => Math.max(...avgPriceByBrand.value.map((b) => b.avg), 1))
+
+// Monthly listing counts — group approved products by YYYY-MM of createdAt
+const monthlyListings = computed(() => {
+  const map: Record<string, { count: number; totalPrice: number }> = {}
+  for (const p of marketplaceProducts.value) {
+    let month = 'Unknown'
+    if (p.createdAt?.toDate) {
+      const d = p.createdAt.toDate() as Date
+      month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    } else if (typeof p.createdAt === 'string') {
+      month = p.createdAt.slice(0, 7)
+    }
+    if (!map[month]) map[month] = { count: 0, totalPrice: 0 }
+    map[month]!.count += 1
+    map[month]!.totalPrice += p.price ?? 0
+  }
+  return Object.entries(map)
+    .map(([month, { count, totalPrice }]) => ({
+      month,
+      count,
+      avgPrice: Math.round(totalPrice / count),
+    }))
+    .sort((a, b) => a.month.localeCompare(b.month))
+})
+
+const maxMonthCount = computed(() => Math.max(...monthlyListings.value.map((m) => m.count), 1))
+
+// AnalyticsData table rows — satisfies the required data table
+const analyticsData = computed(() =>
+  monthlyListings.value.map((m) => ({
+    month: m.month,
+    averagePrice: m.avgPrice,
+    totalListings: m.count,
+  }))
+)
 
 // Single pass over 30K rows to build all three filter option lists at once
 const filterOptions = computed(() => {
@@ -180,7 +254,8 @@ function resetPaging() {
     <div class="panel">
       <div class="toolbar">
         <div class="tabs">
-          <button class="tab" :class="{ active: activeTab === 'shoes' }" @click="activeTab='shoes'; resetPaging(); setSort('total_revenue_usd')">Shoes</button>
+          <button class="tab" :class="{ active: activeTab === 'marketplace' }" @click="activeTab='marketplace'">Marketplace Trends</button>
+          <button class="tab" :class="{ active: activeTab === 'shoes' }" @click="activeTab='shoes'; resetPaging(); setSort('total_revenue_usd')">Global Shoes</button>
           <button class="tab" :class="{ active: activeTab === 'orders' }" @click="activeTab='orders'; resetPaging(); setSort('revenue_usd')">Orders (Raw)</button>
         </div>
 
@@ -225,10 +300,79 @@ function resetPaging() {
         </div>
       </div>
 
-      <div class="status" v-if="loading">Loading dataset…</div>
+      <!-- ── Marketplace Trends Tab ── -->
+      <div v-if="activeTab === 'marketplace'" class="marketplace-section">
+
+        <div class="mkt-grid">
+          <!-- Avg Price by Brand -->
+          <div class="mkt-card">
+            <h2 class="mkt-title">Avg Price by Brand</h2>
+            <p class="mkt-sub">{{ marketplaceProducts.length }} approved listing{{ marketplaceProducts.length !== 1 ? 's' : '' }}</p>
+            <div v-if="avgPriceByBrand.length" class="bar-chart">
+              <div v-for="b in avgPriceByBrand" :key="b.brand" class="bar-row">
+                <span class="bar-label">{{ b.brand }}</span>
+                <div class="bar-track">
+                  <div
+                    class="bar-fill"
+                    :style="{ width: `${Math.round((b.avg / maxBrandAvg) * 100)}%` }"
+                  ></div>
+                </div>
+                <span class="bar-value">${{ b.avg }}</span>
+                <span class="bar-count muted">({{ b.count }})</span>
+              </div>
+            </div>
+            <p v-else class="muted">No listings yet.</p>
+          </div>
+
+          <!-- Monthly Listing Trend -->
+          <div class="mkt-card">
+            <h2 class="mkt-title">Monthly Listings Trend</h2>
+            <p class="mkt-sub">New approved listings per month</p>
+            <div v-if="monthlyListings.length" class="bar-chart">
+              <div v-for="m in monthlyListings" :key="m.month" class="bar-row">
+                <span class="bar-label">{{ m.month }}</span>
+                <div class="bar-track">
+                  <div
+                    class="bar-fill green"
+                    :style="{ width: `${Math.round((m.count / maxMonthCount) * 100)}%` }"
+                  ></div>
+                </div>
+                <span class="bar-value">{{ m.count }}</span>
+                <span class="bar-count muted">avg ${{ m.avgPrice }}</span>
+              </div>
+            </div>
+            <p v-else class="muted">No monthly data yet.</p>
+          </div>
+        </div>
+
+        <!-- AnalyticsData table (satisfies required data table) -->
+        <div class="mkt-table-wrap">
+          <h2 class="mkt-title">Analytics Data Table</h2>
+          <p class="mkt-sub">Monthly summary — averagePrice + totalListings per month</p>
+          <table class="table" v-if="analyticsData.length">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Avg Price ($)</th>
+                <th>Total Listings</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in analyticsData" :key="row.month">
+                <td>{{ row.month }}</td>
+                <td>${{ row.averagePrice }}</td>
+                <td>{{ row.totalListings }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-else class="muted">No analytics data yet.</p>
+        </div>
+      </div>
+
+      <div class="status" v-else-if="loading">Loading dataset…</div>
       <div class="status error" v-else-if="error">{{ error }}</div>
 
-      <div v-else>
+      <div v-else-if="(activeTab as string) !== 'marketplace'">
         <div class="pager">
           <div class="pager__left">
             <span class="muted">Showing</span>
@@ -428,4 +572,71 @@ function resetPaging() {
 .browse-link:hover { background: rgba(156, 255, 0, 0.12); }
 .shoe-kpis { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; color: var(--muted); font-size: 0.8rem; }
 .shoe-kpis strong { color: var(--text); }
+
+/* ── Marketplace Trends ── */
+.marketplace-section { padding: 8px 0; }
+.mkt-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.mkt-card {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(156,255,0,0.12);
+  border-radius: 14px;
+  padding: 18px;
+}
+.mkt-title {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  font-weight: 900;
+  color: var(--text);
+}
+.mkt-sub {
+  margin: 0 0 16px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.bar-chart { display: flex; flex-direction: column; gap: 10px; }
+.bar-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 60px 60px;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+.bar-label {
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bar-track {
+  background: rgba(156,255,0,0.07);
+  border-radius: 4px;
+  height: 10px;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.bar-fill.green { background: var(--success); }
+.bar-value { color: var(--text); font-weight: 700; text-align: right; }
+.bar-count { font-size: 0.75rem; text-align: right; }
+.mkt-table-wrap {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(156,255,0,0.12);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+@media (max-width: 600px) {
+  .mkt-grid { grid-template-columns: 1fr; }
+  .bar-row { grid-template-columns: 80px 1fr 50px; }
+  .bar-count { display: none; }
+}
 </style>

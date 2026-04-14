@@ -9,17 +9,15 @@ import heroImage2 from '@/assets/hero-2.webp'
 const router = useRouter()
 const searchText = ref('')
 const images = [heroImage1, heroImage2]
-
 const currentIndex = ref(0)
 const fading = ref(false)
 
-const heroStyle = computed(() => ({
-  backgroundImage: `url('${images[currentIndex.value]}')`,
-  opacity: fading.value ? '0' : '1',
-}))
+const heroBg = computed(() => images[currentIndex.value])
+const overlayClass = computed(() => (fading.value ? 'hero-bg fading' : 'hero-bg'))
 
 let timer: ReturnType<typeof setInterval>
 let fadeTimer: ReturnType<typeof setTimeout> | null = null
+
 onMounted(() => {
   timer = setInterval(() => {
     fading.value = true
@@ -27,9 +25,10 @@ onMounted(() => {
       currentIndex.value = (currentIndex.value + 1) % images.length
       fading.value = false
       fadeTimer = null
-    }, 600)
-  }, 4000)
+    }, 700)
+  }, 5000)
 })
+
 onUnmounted(() => {
   clearInterval(timer)
   if (fadeTimer) clearTimeout(fadeTimer)
@@ -42,257 +41,449 @@ function submitSearch() {
 </script>
 
 <template>
-  <section class="hero" :style="heroStyle">
-    <div class="hero_Content container">
-      <header class="homeHeader">
-        <router-link class="homeHeader__link" to="/login">Login / Register</router-link>
-      </header>
+  <!-- ─── Hero ─────────────────────────────────────────────── -->
+  <section class="hero">
+    <!-- Background image with cross-fade -->
+    <div :class="overlayClass" :style="{ backgroundImage: `url('${heroBg}')` }"></div>
+    <!-- Dark gradient overlay — bottom-heavy so text is always legible -->
+    <div class="hero-overlay"></div>
 
-      <h1 class="homeTitle"><strong>SoleTrack</strong></h1>
-      <p class="homeSubtitle">Track your sales, find products, and grow your side hustle.</p>
-
-      <div class="homeCtas">
-        <router-link class="btn primary" to="/login">Get started</router-link>
-        <router-link class="btn" to="/browse">Browse products</router-link>
+    <div class="hero-content container">
+      <!-- Eyebrow label -->
+      <div class="eyebrow">
+        <span class="eyebrow-dot"></span>
+        LIVE SNEAKER MARKETPLACE
       </div>
 
-      <form class="homeSearch" @submit.prevent="submitSearch">
-        <label class="homeSearch__label" for="searchInput" >Search</label>
-        <div class="homeSearch__row">
-          <input id="searchInput" v-model="searchText" class="homeSearch__input" type="text" placeholder="Search..." />
-          <button class="homeSearch__button primary" type="submit">Search</button>
+      <!-- Headline -->
+      <h1 class="hero-title">
+        Buy, Sell &amp; Track<br />
+        <span class="title-accent">Rare Kicks.</span>
+      </h1>
+
+      <p class="hero-sub">
+        The peer-to-peer sneaker platform built for resellers.
+        List in 60 seconds, connect with buyers, track every deal.
+      </p>
+
+      <!-- Stats row -->
+      <div class="stats-row">
+        <div class="stat">
+          <span class="stat-num">2,400+</span>
+          <span class="stat-label">Listings</span>
         </div>
+        <div class="stat-sep"></div>
+        <div class="stat">
+          <span class="stat-num">6</span>
+          <span class="stat-label">Verified Vendors</span>
+        </div>
+        <div class="stat-sep"></div>
+        <div class="stat">
+          <span class="stat-num">9</span>
+          <span class="stat-label">Brands</span>
+        </div>
+        <div class="stat-sep"></div>
+        <div class="stat">
+          <span class="stat-num">$0</span>
+          <span class="stat-label">Commission</span>
+        </div>
+      </div>
+
+      <!-- Search -->
+      <form class="hero-search" @submit.prevent="submitSearch">
+        <input
+          v-model="searchText"
+          type="text"
+          placeholder="Search Jordan 1, Dunk Low, Yeezy 350…"
+          aria-label="Search sneakers"
+        />
+        <button class="search-btn" type="submit">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="8.5" cy="8.5" r="5.5"/>
+            <line x1="13" y1="13" x2="18" y2="18"/>
+          </svg>
+          Search
+        </button>
       </form>
+
+      <!-- CTAs -->
+      <div class="hero-ctas">
+        <router-link class="cta-primary" to="/browse">Browse Marketplace</router-link>
+        <router-link class="cta-ghost" to="/sell">Start Selling →</router-link>
+      </div>
+    </div>
+
+    <!-- Scroll hint -->
+    <div class="scroll-hint" aria-hidden="true">
+      <div class="scroll-hint__line"></div>
+      <span>scroll</span>
     </div>
   </section>
 
+  <!-- ─── Ticker ────────────────────────────────────────────── -->
   <MarqueeTicker />
+
+  <!-- ─── Feature strip ─────────────────────────────────────── -->
+  <section class="features">
+    <div class="container features-grid">
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+          </svg>
+        </div>
+        <h3>Instant Checkout</h3>
+        <p>Place an order in seconds. Pick your preferred pickup time and the vendor handles the rest.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+            <polyline points="16 7 22 7 22 13"/>
+          </svg>
+        </div>
+        <h3>Market Analytics</h3>
+        <p>See real-time price trends, brand breakdowns, and monthly listing data — all free, no paywall.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+            <line x1="7" y1="7" x2="7.01" y2="7"/>
+          </svg>
+        </div>
+        <h3>Sell in 60 Seconds</h3>
+        <p>Create your vendor profile, list a pair, and start connecting with buyers the same day.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </div>
+        <h3>Verified Vendors</h3>
+        <p>Every seller goes through admin review before listings go live. Shop with confidence.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Scroll gallery ───────────────────────────────────── -->
   <StickyScrollGallery />
 </template>
 
 <style scoped>
+/* ── Hero ─────────────────────────────────────────────────── */
 .hero {
-  min-height: 70vh;
-  height: auto;
-  padding: 56px 0 24px;
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-.hero_Content {
-  width: 100%;
-  gap: 14px;
-}
-
-.homeHeader {
-  width: 100%;
+  position: relative;
+  min-height: 100svh;
   display: flex;
-  justify-content: flex-end;
+  align-items: flex-end;
+  padding-bottom: 80px;
+  overflow: hidden;
 }
 
-.homeHeader__link {
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center 30%;
+  transition: opacity 0.7s ease;
+  z-index: 0;
+}
+.hero-bg.fading { opacity: 0; }
+
+/* Multi-layer overlay: strong bottom-up dark + subtle vignette */
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(to top,  rgba(7, 13, 9, 0.97) 0%,  rgba(7, 13, 9, 0.72) 40%, rgba(7, 13, 9, 0.30) 70%, rgba(7, 13, 9, 0.18) 100%),
+    linear-gradient(to right, rgba(7, 13, 9, 0.35) 0%, transparent 60%);
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  max-width: 680px;
+}
+
+/* Eyebrow */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  border: 1px solid rgba(156, 255, 0, 0.25);
+  background: rgba(156, 255, 0, 0.06);
+  padding: 5px 12px;
+  border-radius: 999px;
+  margin-bottom: 22px;
+}
+.eyebrow-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: blink 1.6s ease-in-out infinite;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Headline */
+.hero-title {
+  margin: 0 0 18px;
+  font-size: clamp(2.6rem, 6.5vw, 5rem);
+  font-weight: 900;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
   color: var(--text);
-  text-decoration: none;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.02);
+}
+.title-accent {
+  color: var(--accent);
+  display: block;
 }
 
-.homeTitle {
-  margin: 0;
-  font-size: clamp(36px, 6vw, 56px);
+/* Subtitle */
+.hero-sub {
+  margin: 0 0 28px;
+  color: var(--muted);
+  font-size: clamp(0.95rem, 1.5vw, 1.1rem);
+  line-height: 1.65;
+  max-width: 52ch;
+}
+
+/* Stats row */
+.stats-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-wrap: wrap;
+  row-gap: 12px;
+  margin-bottom: 28px;
+  padding: 14px 18px;
+  border: 1px solid rgba(156, 255, 0, 0.14);
+  border-radius: 14px;
+  background: rgba(7, 13, 9, 0.7);
+  backdrop-filter: blur(10px);
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 20px;
+}
+.stat:first-child { padding-left: 0; }
+.stat-num {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: var(--text);
   letter-spacing: -0.02em;
 }
-
-.homeSubtitle {
-  margin: 0;
+.stat-label {
+  font-size: 0.72rem;
   color: var(--muted);
-  text-align: center;
-  max-width: 60ch;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.stat-sep {
+  width: 1px;
+  height: 32px;
+  background: rgba(156, 255, 0, 0.12);
+  flex-shrink: 0;
 }
 
-.homeCtas {
+/* Search */
+.hero-search {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0;
+  width: 100%;
+  max-width: 540px;
+  margin-bottom: 24px;
+  border: 1px solid rgba(156, 255, 0, 0.2);
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(13, 22, 16, 0.9);
+  backdrop-filter: blur(12px);
+}
+.hero-search input {
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 0.95rem;
+  outline: none;
+  min-width: 0;
+}
+.hero-search input::placeholder { color: var(--muted); }
+.search-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 18px;
+  background: var(--accent);
+  color: #0b1205;
+  font-weight: 900;
+  font-size: 0.88rem;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  border-radius: 0;
+  transition: opacity 0.15s;
+}
+.search-btn:hover { opacity: 0.88; }
+.search-btn svg { width: 16px; height: 16px; }
+
+/* CTAs */
+.hero-ctas {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
-  justify-content: center;
-  margin-top: 8px;
+  align-items: center;
 }
-
-.btn {
+.cta-primary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  text-decoration: none;
-  font-weight: 600;
-}
-
-.btn.primary {
+  padding: 13px 28px;
+  border-radius: 12px;
   background: var(--accent);
-  border-color: transparent;
   color: #0b1205;
+  font-weight: 900;
+  font-size: 0.95rem;
+  text-decoration: none;
+  transition: opacity 0.15s, transform 0.15s;
+  letter-spacing: 0.01em;
 }
+.cta-primary:hover { opacity: 0.88; transform: translateY(-1px); }
 
-.homeSearch {
-  width: 100%;
-  max-width: 560px;
-  margin-top: 10px;
-}
-
-.homeSearch__label {
-  display: block;
-  margin-bottom: 6px;
-  text-align: center;
-}
-
-.homeSearch__row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
+.cta-ghost {
+  display: inline-flex;
   align-items: center;
+  padding: 13px 22px;
+  border-radius: 12px;
+  border: 1px solid rgba(156, 255, 0, 0.25);
+  background: rgba(156, 255, 0, 0.04);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.95rem;
+  text-decoration: none;
+  transition: border-color 0.2s, background 0.2s;
 }
-
-.homeSearch__input {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--card);
+.cta-ghost:hover {
+  border-color: rgba(156, 255, 0, 0.5);
+  background: rgba(156, 255, 0, 0.08);
   color: var(--text);
 }
 
-.homeSearch__button {
-  padding: 10px 14px;
-  border-radius: 10px;
-}
-
-.homeBody {
-  padding: 16px 16px 32px;
-}
-
-.homeFooter {
-  margin-top: 18px;
-}
-
-/* Welcome section with animated circles background */
-.welcomeSection {
-  position: relative;
-  overflow: hidden;
-  background: var(--bg);
-}
-
-.circles {
+/* Scroll hint */
+.scroll-hint {
   position: absolute;
-  inset: 0;
+  bottom: 28px;
+  right: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 2;
+}
+.scroll-hint__line {
+  width: 1px;
+  height: 40px;
+  background: linear-gradient(to bottom, var(--accent), transparent);
+  animation: scroll-line 1.8s ease-in-out infinite;
+}
+@keyframes scroll-line {
+  0% { transform: scaleY(0); transform-origin: top; }
+  50% { transform: scaleY(1); transform-origin: top; }
+  51% { transform-origin: bottom; }
+  100% { transform: scaleY(0); transform-origin: bottom; }
+}
+.scroll-hint span {
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  writing-mode: vertical-rl;
+  text-transform: uppercase;
+}
+
+/* ── Feature strip ───────────────────────────────────────── */
+.features {
+  padding: 64px 0 72px;
+  background: var(--bg);
+  border-top: 1px solid rgba(156, 255, 0, 0.07);
+}
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+.feature {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.feature-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(156, 255, 0, 0.07);
+  border: 1px solid rgba(156, 255, 0, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
-  z-index: 0;
+  flex-shrink: 0;
+}
+.feature-icon svg {
+  width: 20px;
+  height: 20px;
+  color: var(--accent);
+}
+.feature h3 {
+  margin: 0;
+  font-size: 0.97rem;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.feature p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.65;
 }
 
-.circle {
-  position: absolute;
-  border-radius: 50%;
-  border: 1px solid rgba(156, 255, 0, 0.12);
-  animation: pulse 6s ease-in-out infinite;
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .features-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-.circle--1 {
-  width: 200px;
-  height: 200px;
-  animation-delay: 0s;
-  border-color: rgba(156, 255, 0, 0.25);
-}
-
-.circle--2 {
-  width: 380px;
-  height: 380px;
-  animation-delay: 0.8s;
-  border-color: rgba(156, 255, 0, 0.18);
-}
-
-.circle--3 {
-  width: 560px;
-  height: 560px;
-  animation-delay: 1.6s;
-  border-color: rgba(156, 255, 0, 0.12);
-}
-
-.circle--4 {
-  width: 740px;
-  height: 740px;
-  animation-delay: 2.4s;
-  border-color: rgba(156, 255, 0, 0.07);
-}
-
-.circle--5 {
-  width: 920px;
-  height: 920px;
-  animation-delay: 3.2s;
-  border-color: rgba(156, 255, 0, 0.04);
-}
-
-@keyframes pulse {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 0.6;
-  }
-  50% {
-    transform: scale(1.06);
-    opacity: 1;
-  }
-}
-
-/* Keep cards and title above the circles */
-.welcomeTitle,
-.welcomeContainer {
-  position: relative;
-  z-index: 1;
-}
-
-@media (max-width: 520px) {
-  .homeSearch__row {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 600px) {
-  .hero {
-    min-height: 100svh;
-    padding: 72px 0 32px;
-  }
-
-  .homeTitle {
-    font-size: clamp(28px, 8vw, 40px);
-  }
-
-  .homeSubtitle {
-    font-size: 0.9rem;
-    padding: 0 8px;
-  }
-
-  .homeCtas {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 0 16px;
-  }
-
-  .homeCtas .btn {
-    text-align: center;
-    justify-content: center;
-  }
-
-  .homeSearch {
-    padding: 0 16px;
-    max-width: 100%;
-  }
+@media (max-width: 640px) {
+  .hero { align-items: flex-start; padding-top: 100px; padding-bottom: 60px; }
+  .hero-title { font-size: clamp(2.2rem, 10vw, 3rem); }
+  .stats-row { gap: 0; padding: 10px 14px; }
+  .stat { padding: 0 12px; }
+  .stat-num { font-size: 1.1rem; }
+  .hero-search { grid-template-columns: 1fr; border-radius: 12px; }
+  .search-btn { border-radius: 0 0 12px 12px; justify-content: center; }
+  .hero-ctas { flex-direction: column; align-items: stretch; }
+  .cta-primary, .cta-ghost { text-align: center; justify-content: center; }
+  .scroll-hint { display: none; }
+  .features { padding: 40px 0 48px; }
+  .features-grid { grid-template-columns: 1fr; gap: 28px; }
 }
 </style>

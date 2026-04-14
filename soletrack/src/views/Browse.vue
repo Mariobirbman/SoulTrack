@@ -71,7 +71,6 @@ const selectedBrand = ref('All')
 const selectedCondition = ref('All')
 const selectedPlatform = ref('All')
 const sortBy = ref('price-asc')
-const expandedId = ref<string | null>(null)
 
 const brands = computed(() => ['All', ...Array.from(new Set(products.value.map((p) => p.brand).filter(Boolean))).sort()])
 const conditions = ['All', 'DS', 'New', 'Used']
@@ -112,9 +111,6 @@ function isWatched(id: string) {
   return watchlist.value.includes(id)
 }
 
-function toggleExpand(id: string) {
-  expandedId.value = expandedId.value === id ? null : id
-}
 
 const conditionColor: Record<string, string> = {
   DS: 'var(--accent)',
@@ -251,25 +247,9 @@ function addProductToCart(p: Product) {
             </span>
           </div>
 
-          <button class="expand-btn" @click="toggleExpand(p.id)">
-            {{ expandedId === p.id ? 'Hide details' : 'View details' }}
-          </button>
-          <Transition name="slide">
-            <div class="product-desc" v-if="expandedId === p.id">
-              <p>{{ p.description }}</p>
-            </div>
-          </Transition>
-
           <div class="product-footer">
             <button class="btn primary btn-sm" @click="addProductToCart(p)">Add to cart</button>
-            <router-link
-              v-if="p.vendorUid"
-              :to="`/vendor/${p.vendorUid}`"
-              class="btn btn-sm"
-            >
-              View vendor
-            </router-link>
-            <router-link v-else to="/vendors" class="btn btn-sm">Vendors</router-link>
+            <router-link :to="`/item/${p.id}`" class="btn btn-sm">View details</router-link>
           </div>
         </div>
       </div>

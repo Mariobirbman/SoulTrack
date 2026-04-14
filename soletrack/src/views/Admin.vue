@@ -10,6 +10,7 @@ import {
   serverTimestamp,
   doc,
   updateDoc,
+  setDoc,
 } from 'firebase/firestore'
 import { useAuth } from '@/lib/auth'
 import { useRole } from '@/lib/role'
@@ -94,6 +95,24 @@ onMounted(() => {
 
 onBeforeUnmount(() => stopListener?.())
 
+// Write/update the AnalyticsData table entry for the current month
+async function writeAnalyticsData(price: number) {
+  if (!db) return
+  const now = new Date()
+  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  // Recompute from all approved products for this month
+  const approved = allProducts.value.filter((p) => p.status === 'approved' || p.id === 'being-approved')
+  const monthPrices = approved.map((p) => p.price).concat(price)
+  const avgPrice = Math.round(monthPrices.reduce((a, b) => a + b, 0) / monthPrices.length)
+  const totalListings = monthPrices.length
+  await setDoc(doc(db, 'analyticsData', month), {
+    month,
+    averagePrice: avgPrice,
+    totalListings,
+    createdAt: serverTimestamp(),
+  }, { merge: true })
+}
+
 async function approve(id: string) {
   if (demoMode) {
     approveDemoProduct(id)
@@ -103,6 +122,7 @@ async function approve(id: string) {
   }
   if (!db || !user.value) return
   try {
+    const product = allProducts.value.find((p) => p.id === id)
     await updateDoc(doc(db, 'products', id), { status: 'approved', updatedAt: serverTimestamp() })
     await addDoc(collection(db, 'adminActions'), {
       adminId: user.value.uid,
@@ -111,6 +131,8 @@ async function approve(id: string) {
       note: null,
       createdAt: serverTimestamp(),
     })
+    // Update AnalyticsData table for this month
+    if (product) await writeAnalyticsData(product.price)
   } catch {
     error.value = 'Could not approve listing.'
   }

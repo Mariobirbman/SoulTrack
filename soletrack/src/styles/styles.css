@@ -1,18 +1,17 @@
 :root {
-  --bg: #2c312d;
-  /* near-black with green tint */
-  --card: #2a332e;
-  --text: #d6f2b4;
-  /* soft pale for main text */
-  --muted: #94a08f;
+  --bg: #070d09;
+  /* near-black with green tint — premium dark */
+  --card: #0d1610;
+  --text: #dff0c4;
+  /* cool off-white text */
+  --muted: #5e7855;
   --accent: #9CFF00;
   /* lime-green highlight */
-  --accent-darker: #577f01;
-  /* darker shade of lime-green */
+  --accent-darker: #5a8500;
   --accent-rgb: 156, 255, 0;
   --danger: #ff6b6b;
   --success: #32d74b;
-  --border: rgba(255, 255, 255, 0.06);
+  --border: rgba(156, 255, 0, 0.09);
   --radius: 8px;
   --max-width: 1024px;
 }

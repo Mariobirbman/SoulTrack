@@ -2,6 +2,7 @@ import { ref, watch } from 'vue'
 import { doc, getDoc } from 'firebase/firestore'
 import { db, demoMode } from './firebase'
 import { useAuth } from './auth'
+import { isDemoAdmin } from './demo'
 
 const isAdmin = ref(false)
 
@@ -9,8 +10,8 @@ export function useRole() {
   const { user } = useAuth()
 
   if (demoMode) {
-    // Demo user is treated as admin so the admin panel is always demonstrable
-    isAdmin.value = !!user.value
+    // In demo mode, only users who clicked "Login as Admin" get admin access
+    isAdmin.value = !!user.value && isDemoAdmin()
     return { isAdmin }
   }
 
