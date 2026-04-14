@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git stash:*)",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(code /home/mariogutierrez/Downloads/SoulTrack)",
+      "Bash(curl -fsSL https://codedb.codegraff.com/install.sh)",
+      "Bash(bash)",
+      "Bash(export PATH=\"/home/mariogutierrez/bin:$PATH\")",
+      "Bash(codedb index:*)",
+      "Bash(codedb --help)",
+      "Bash(codedb /home/mariogutierrez/Downloads/SoulTrack/soletrack/src tree)",
+      "Read(//home/mariogutierrez/.claude/**)",
+      "Bash(cp /home/mariogutierrez/Downloads/claude-skills/.claude/commands/*.md /home/mariogutierrez/.claude/commands/)",
+      "Bash(cp /home/mariogutierrez/Downloads/claude-skills/.claude/commands/git/*.md /home/mariogutierrez/.claude/commands/git/)",
+      "Bash(cp /home/mariogutierrez/Downloads/claude-mem/plugin/skills/mem-search/SKILL.md /home/mariogutierrez/.claude/commands/mem-search.md)",
+      "Bash(cp /home/mariogutierrez/Downloads/claude-mem/plugin/skills/make-plan/SKILL.md /home/mariogutierrez/.claude/commands/make-plan.md)",
+      "Bash(cp /home/mariogutierrez/Downloads/claude-mem/plugin/skills/do/SKILL.md /home/mariogutierrez/.claude/commands/do.md)",
+      "Read(//home/mariogutierrez/**)",
+      "Bash(ls /home/mariogutierrez/.agents/skills/caveman*)",
+      "Bash(cp /home/mariogutierrez/.agents/skills/caveman/SKILL.md /home/mariogutierrez/.claude/commands/caveman.md)",
+      "Bash(cp /home/mariogutierrez/.agents/skills/caveman-commit/SKILL.md /home/mariogutierrez/.claude/commands/caveman-commit.md)",
+      "Bash(cp /home/mariogutierrez/.agents/skills/caveman-compress/SKILL.md /home/mariogutierrez/.claude/commands/caveman-compress.md)",
+      "Bash(cp /home/mariogutierrez/.agents/skills/caveman-help/SKILL.md /home/mariogutierrez/.claude/commands/caveman-help.md)",
+      "Bash(cp /home/mariogutierrez/.agents/skills/caveman-review/SKILL.md /home/mariogutierrez/.claude/commands/caveman-review.md)",
+      "Bash(node_modules/.bin/vite --port 5173)",
+      "Bash(pkill -f vite)",
+      "Bash(node_modules/.bin/vite)",
+      "Bash(curl -s http://localhost:5173)",
+      "Read(//tmp/**)",
+      "Bash(xargs -I {} bash -c 'echo \"=== {} ===\" && cat {}')",
+      "Bash(npm test:*)"
+    ],
+    "additionalDirectories": [
+      "/home/mariogutierrez/.claude/commands"
+    ]
+  }
+}

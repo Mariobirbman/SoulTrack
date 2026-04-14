@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
+import { addDoc, collection, doc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { useAuth } from '@/lib/auth'
 import { useCart } from '@/lib/cart'
 import { auth, db, firebaseConfigured } from '@/lib/firebase'
@@ -56,6 +56,22 @@ function newCheckoutId() {
   return `chk_${Math.random().toString(16).slice(2)}_${Date.now()}`
 }
 
+async function validateCartPrices(): Promise<string | null> {
+  if (!db) return null
+  const realLines = lines.value.filter((l) => l.vendorUid && !l.vendorUid.startsWith('__'))
+  for (const l of realLines) {
+    const snap = await getDoc(doc(db, 'products', l.id))
+    if (!snap.exists()) return `Item "${l.name}" is no longer available.`
+    const data = snap.data()
+    if (data.status !== 'approved') return `Item "${l.name}" is no longer available for purchase.`
+    const serverPrice = Number(data.price ?? 0)
+    if (Math.abs(serverPrice - l.price) > 0.01) {
+      return `Price for "${l.name}" has changed to ${fmtUSD(serverPrice)}. Please refresh your cart.`
+    }
+  }
+  return null
+}
+
 async function placeOrders() {
   error.value = ''
   if (!firebaseConfigured || !auth || !db) {
@@ -88,6 +104,13 @@ async function placeOrders() {
   }
 
   saving.value = true
+  const priceError = await validateCartPrices().catch(() => null)
+  if (priceError) {
+    error.value = priceError
+    saving.value = false
+    return
+  }
+
   const checkoutId = newCheckoutId()
   try {
     for (const g of byVendor.value) {
@@ -250,5 +273,12 @@ async function placeOrders() {
 }
 .btn.primary { background: var(--accent); border-color: transparent; color: #0b1205; width: 100%; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+@media (max-width: 600px) {
+  .checkout-page { padding: 20px 12px 60px; }
+  .head { flex-wrap: wrap; }
+  .panel { padding: 14px; }
+  .line { grid-template-columns: 28px 1fr auto; }
+}
 </style>
 

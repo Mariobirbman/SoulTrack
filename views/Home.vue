@@ -19,16 +19,21 @@ const heroStyle = computed(() => ({
 }))
 
 let timer: ReturnType<typeof setInterval>
+let fadeTimer: ReturnType<typeof setTimeout> | null = null
 onMounted(() => {
   timer = setInterval(() => {
     fading.value = true
-    setTimeout(() => {
+    fadeTimer = setTimeout(() => {
       currentIndex.value = (currentIndex.value + 1) % images.length
       fading.value = false
+      fadeTimer = null
     }, 600)
   }, 4000)
 })
-onUnmounted(() => clearInterval(timer))
+onUnmounted(() => {
+  clearInterval(timer)
+  if (fadeTimer) clearTimeout(fadeTimer)
+})
 
 function submitSearch() {
   const q = searchText.value.trim()

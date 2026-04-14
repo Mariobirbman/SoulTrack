@@ -2,11 +2,13 @@
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '@/lib/auth'
+import { useRole } from '@/lib/role'
 import FirebaseStatusBanner from '@/components/FirebaseStatusBanner.vue'
 import Footer from '@/components/Footer.vue'
 import { useCart } from '@/lib/cart'
 
 const { user } = useAuth()
+const { isAdmin } = useRole()
 const isLoggedIn = computed(() => !!user.value)
 const { totalCount } = useCart()
 
@@ -63,7 +65,7 @@ watch(() => route.fullPath, () => closeMenu())
           <li><router-link to="/" @click="closeMenu">Home</router-link></li>
           <li><router-link to="/browse" @click="closeMenu">Browse</router-link></li>
           <li><router-link to="/vendors" @click="closeMenu">Vendors</router-link></li>
-          <li><router-link to="/analytics" @click="closeMenu">Catalog</router-link></li>
+          <li><router-link to="/analytics" @click="closeMenu">Market Data</router-link></li>
           <li>
             <router-link to="/cart" class="cart-link" @click="closeMenu">
               Cart
@@ -89,6 +91,7 @@ watch(() => route.fullPath, () => closeMenu())
               <li><router-link to="/account" @click="closeMenu">My Account</router-link></li>
               <li><router-link to="/sell" @click="closeMenu">Sell a Shoe</router-link></li>
               <li><router-link to="/orders" @click="closeMenu">My Orders</router-link></li>
+              <li v-if="isAdmin"><router-link to="/admin" @click="closeMenu" class="admin-link">Admin Panel</router-link></li>
             </ul>
           </li>
 
@@ -97,6 +100,7 @@ watch(() => route.fullPath, () => closeMenu())
             <li class="mobile-account-link"><router-link to="/account" @click="closeMenu">My Account</router-link></li>
             <li class="mobile-account-link"><router-link to="/sell" @click="closeMenu">Sell a Shoe</router-link></li>
             <li class="mobile-account-link"><router-link to="/orders" @click="closeMenu">My Orders</router-link></li>
+            <li v-if="isAdmin" class="mobile-account-link"><router-link to="/admin" @click="closeMenu">Admin Panel</router-link></li>
           </template>
         </ul>
       </div>
@@ -186,13 +190,13 @@ nav {
   background: transparent;
   border: 1px solid rgba(156, 255, 0, 0.18);
   color: var(--text);
-  padding: 8px 10px;
+  padding: 10px;
   border-radius: 10px;
   cursor: pointer;
   flex-direction: column;
   gap: 4px;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   align-items: center;
   justify-content: center;
 }
@@ -219,9 +223,10 @@ nav ul {
 nav a {
   color: var(--muted);
   text-decoration: none;
-  font-size: 0.88rem;
+  font-size: 0.92rem;
   font-weight: 500;
-  padding: 6px 11px;
+  min-height: 42px;
+  padding: 8px 12px;
   border-radius: 8px;
   transition: color 0.2s, background 0.2s;
   display: inline-flex;
@@ -238,7 +243,7 @@ nav a.router-link-exact-active { color: var(--accent); }
   border: 1px solid rgba(156, 255, 0, 0.2);
   color: var(--text) !important;
   font-weight: 700 !important;
-  padding: 6px 14px !important;
+  padding: 8px 14px !important;
 }
 .nav-cta:hover { background: rgba(156, 255, 0, 0.14) !important; }
 
@@ -270,9 +275,10 @@ nav a.router-link-exact-active { color: var(--accent); }
   background: transparent;
   border: 1px solid rgba(156, 255, 0, 0.18);
   color: var(--text);
-  font-size: 0.88rem;
+  font-size: 0.92rem;
   font-weight: 700;
-  padding: 6px 12px;
+  min-height: 42px;
+  padding: 8px 14px;
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s;
@@ -320,6 +326,8 @@ nav a.router-link-exact-active { color: var(--accent); }
   width: 100%;
 }
 
+.account-dropdown .admin-link { color: var(--accent) !important; }
+
 .account-dropdown a:hover {
   color: var(--text) !important;
   background: rgba(156, 255, 0, 0.06) !important;
@@ -346,14 +354,14 @@ nav a.router-link-exact-active { color: var(--accent); }
     gap: 4px;
   }
   nav ul.open { display: flex; }
-  nav a { padding: 10px 12px; }
+  nav a { min-height: 46px; padding: 12px 14px; }
 
   /* Hide desktop account dropdown on mobile, show flat links instead */
   .account-wrap { display: none; }
   .mobile-account-link { display: flex !important; }
   .mobile-account-link a {
     padding-left: 20px;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     color: var(--muted);
   }
 

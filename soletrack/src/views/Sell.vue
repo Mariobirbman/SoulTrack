@@ -43,6 +43,7 @@ type ProductDoc = {
   image?: string
   description?: string
   active?: boolean
+  status?: string
 }
 
 const router = useRouter()
@@ -257,11 +258,12 @@ async function saveProduct() {
   }
 
   if (demoMode) {
-    const next = upsertDemoProduct({ id: editingId.value ?? undefined, ...payload })
+    const demoPayload = editingId.value ? payload : { ...payload, status: 'pending' }
+    const next = upsertDemoProduct({ id: editingId.value ?? undefined, ...demoPayload })
     products.value = (next.filter((p) => p.vendorUid === currentUser.uid) as any).sort((a: any, b: any) =>
       String(a.name ?? '').localeCompare(String(b.name ?? '')),
     )
-    status.value = editingId.value ? 'Product updated (demo mode).' : 'Product listed (demo mode).'
+    status.value = editingId.value ? 'Product updated (demo mode).' : 'Product submitted for review (demo mode).'
     resetProductForm()
     return
   }
@@ -273,12 +275,37 @@ async function saveProduct() {
       status.value = 'Product updated.'
     } else {
       payload.createdAt = serverTimestamp()
+      payload.status = 'pending'
       await addDoc(collection(db, 'products'), payload)
-      status.value = 'Product listed.'
+      status.value = 'Product submitted for review. An admin will approve it shortly.'
     }
     resetProductForm()
   } catch {
     error.value = 'Could not save product.'
+  }
+}
+
+async function markAsSold(id: string) {
+  status.value = ''
+  error.value = ''
+  if (!canUseMarketplace.value) return
+  if (demoMode) {
+    const current = products.value.find((p) => p.id === id)
+    if (!current) return
+    // cast to any to satisfy DemoProduct's required brand field — product is already valid shape
+    const next = upsertDemoProduct({ ...(current as any), status: 'sold' })
+    products.value = (next.filter((p: any) => p.vendorUid === uid.value) as any).sort((a: any, b: any) =>
+      String(a.name ?? '').localeCompare(String(b.name ?? '')),
+    )
+    status.value = 'Marked as sold (demo mode).'
+    return
+  }
+  if (!db) return
+  try {
+    await updateDoc(doc(db, 'products', id), { status: 'sold', active: false, updatedAt: serverTimestamp() })
+    status.value = 'Listing marked as sold.'
+  } catch {
+    error.value = 'Could not update listing.'
   }
 }
 
@@ -328,7 +355,7 @@ async function addSampleListings() {
         size: '10',
         price: 165,
         condition: 'New',
-        image: '/images/shoes/generated-11.webp',
+        image: 'https://images.unsplash.com/photo-g1vk_Bef2Xk?w=600&q=80&auto=format&fit=crop',
         description: 'Clean, ready for pickup. Box included.',
       },
       {
@@ -337,7 +364,7 @@ async function addSampleListings() {
         size: '10.5',
         price: 305,
         condition: 'DS',
-        image: '/images/shoes/generated-12.webp',
+        image: 'https://images.unsplash.com/photo-aDZ5YIuedQg?w=600&q=80&auto=format&fit=crop',
         description: 'Deadstock, never worn. Local pickup only.',
       },
       {
@@ -346,7 +373,7 @@ async function addSampleListings() {
         size: '9.5',
         price: 140,
         condition: 'New',
-        image: '/images/shoes/generated-06.webp',
+        image: 'https://images.unsplash.com/photo-3bBihBr7wRE?w=600&q=80&auto=format&fit=crop',
         description: 'Brand new pair. Great starter flip.',
       },
     ]
@@ -472,16 +499,34 @@ async function addSampleListings() {
           </div>
         </div>
 
+        <div v-if="products.some(p => p.status === 'pending')" class="notice pending-notice">
+          You have listings awaiting admin review. They will not appear on Browse until approved.
+        </div>
+
         <div class="list" v-if="products.length">
           <div class="item" v-for="p in products" :key="p.id">
             <img class="thumb" :src="p.image || '/images/shoes/pexels-jonathanborba-12031204.jpg'" :alt="p.name" />
             <div class="meta">
               <div class="name">{{ p.name }}</div>
               <div class="muted">{{ p.brand || '—' }} · {{ p.size || '—' }} · ${{ p.price }}</div>
+              <div v-if="p.status === 'pending'" class="pending-hint">
+                Awaiting admin approval — not visible to shoppers yet.
+              </div>
+              <div v-if="p.status === 'rejected'" class="rejected-hint">
+                Rejected by admin. Edit and resubmit, or contact support.
+              </div>
             </div>
             <div class="right">
-              <span class="pill" :class="{ off: p.active === false }">{{ p.active === false ? 'Hidden' : 'Active' }}</span>
-              <button class="btn sm" @click="startEdit(p)">Edit</button>
+              <span class="status-badge" :class="p.status || 'approved'">
+                {{ p.status === 'pending' ? 'Pending' : p.status === 'rejected' ? 'Rejected' : p.status === 'sold' ? 'Sold' : 'Active' }}
+              </span>
+              <button class="btn sm" @click="startEdit(p)" :disabled="p.status === 'sold'">Edit</button>
+              <button
+                v-if="p.status !== 'sold'"
+                class="btn sm"
+                @click="markAsSold(p.id)"
+                title="Mark as sold"
+              >Sold</button>
               <button class="btn sm danger" @click="removeProduct(p.id)">Delete</button>
             </div>
           </div>
@@ -505,6 +550,17 @@ async function addSampleListings() {
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
 @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
 
+@media (max-width: 600px) {
+  .sell-page { padding: 20px 12px 60px; }
+  .head { flex-direction: column; align-items: flex-start; }
+  .head-actions { width: 100%; }
+  .head-actions .btn { width: 100%; text-align: center; justify-content: center; }
+  .actions { justify-content: stretch; }
+  .actions .btn { flex: 1; }
+  .item { grid-template-columns: 52px 1fr; }
+  .right { grid-column: 1 / -1; justify-content: flex-start; }
+}
+
 .panel {
   border: 1px solid rgba(156, 255, 0, 0.12);
   border-radius: 16px;
@@ -517,6 +573,10 @@ async function addSampleListings() {
 .notice { border-radius: 12px; padding: 10px 12px; border: 1px solid; margin: 10px 0; }
 .notice.error { border-color: rgba(255,50,50,0.35); color: var(--danger); background: rgba(255,50,50,0.06); }
 .notice.ok { border-color: rgba(80,220,120,0.35); color: var(--success); background: rgba(80,220,120,0.06); }
+.pending-notice { border-color: rgba(255,180,0,0.3); color: #f5a623; background: rgba(255,180,0,0.05); margin-top: 10px; }
+
+.pending-hint { font-size: 0.78rem; color: #f5a623; margin-top: 3px; }
+.rejected-hint { font-size: 0.78rem; color: var(--danger); margin-top: 3px; }
 
 .form { display: grid; gap: 10px; }
 .row { display: grid; gap: 6px; }
@@ -553,16 +613,18 @@ async function addSampleListings() {
 .muted { color: var(--muted); font-size: 0.85rem; }
 .right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
-.pill {
+.status-badge {
   font-size: 0.72rem;
-  font-weight: 900;
-  padding: 4px 10px;
-  border-radius: 999px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
   border: 1px solid rgba(156, 255, 0, 0.25);
   color: var(--accent);
   background: rgba(156, 255, 0, 0.06);
 }
-.pill.off { border-color: rgba(255,50,50,0.25); color: var(--danger); background: rgba(255,50,50,0.06); }
+.status-badge.pending { border-color: rgba(255, 180, 0, 0.3); color: #f5a623; background: rgba(255, 180, 0, 0.06); }
+.status-badge.rejected { border-color: rgba(255, 50, 50, 0.3); color: var(--danger); background: rgba(255, 50, 50, 0.06); }
+.status-badge.sold { border-color: rgba(150, 150, 150, 0.3); color: var(--muted); background: rgba(150, 150, 150, 0.05); }
 
 .btn {
   padding: 10px 14px;

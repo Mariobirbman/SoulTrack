@@ -424,8 +424,14 @@ const avgRating = computed(() => {
 
 .vendor-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
   gap: 20px;
+}
+
+@media (max-width: 600px) {
+  .vendors-body { padding: 24px 16px 60px; }
+  .vendor-card { padding: 16px; }
+  .vendors-hero { padding: 52px 16px 36px; }
 }
 
 .vendor-card {

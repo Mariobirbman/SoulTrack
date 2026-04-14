@@ -29,3 +29,4 @@ Thumbs.db
 **/*._backup_*/
 soletrack/devserver.log
 soletrack/devserver.err.log
+.gitnexus
