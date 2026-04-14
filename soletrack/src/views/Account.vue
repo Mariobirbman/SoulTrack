@@ -418,4 +418,15 @@ async function logout() {
 
 .slide-enter-active, .slide-leave-active { transition: all 0.25s ease; }
 .slide-enter-from, .slide-leave-to { opacity: 0; transform: translateY(-8px); }
+
+@media (max-width: 600px) {
+  .account-page { padding: 20px 12px 60px; }
+  .stats-row { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 24px; }
+  .stat-card { padding: 14px 16px; }
+  .stat-value { font-size: 1.3rem; }
+  .add-sale-form { padding: 16px; }
+  .actions-row { justify-content: stretch; }
+  .actions-row .btn { width: 100%; }
+  .sales-table th, .sales-table td { padding: 10px 8px; font-size: 0.8rem; }
+}
 </style>

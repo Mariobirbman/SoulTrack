@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "codedb": {
+      "command": "wsl",
+      "args": [
+        "bash",
+        "-c",
+        "cd /mnt/c/Users/lolst/OneDrive/Documents/SoulTrack-ayi12-initial && ~/bin/codedb mcp"
+      ]
+    }
+  }
+}

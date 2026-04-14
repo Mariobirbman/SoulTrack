@@ -3,8 +3,6 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import type { SalesOrderRow, ShoeAggRow } from '@/lib/salesDataset'
 import { aggregateShoes, loadSalesOrdersCsv } from '@/lib/salesDataset'
 import { simulatePrice } from '@/lib/priceSim'
-import { useCart } from '@/lib/cart'
-
 const loading = ref(true)
 const error = ref('')
 // shallowRef: only the array reference is reactive, not every row object inside.
@@ -23,7 +21,6 @@ const page = ref(1)
 const sortKey = ref<string>('total_revenue_usd')
 const sortDir = ref<'asc' | 'desc'>('desc')
 
-const { add: addToCart } = useCart()
 const nowMs = ref(Date.now())
 let tickTimer: number | null = null
 
@@ -170,15 +167,20 @@ function resetPaging() {
     <div class="hero">
       <div class="hero__grid"></div>
       <div class="hero__content">
-        <h1 class="title">Shoe <span class="accent">Catalog</span></h1>
-        <p class="sub">Global sports footwear sales (2018–2026) — 30,000 orders.</p>
+        <h1 class="title">Market <span class="accent">Data</span></h1>
+        <p class="sub">Global footwear sales analytics (2018–2026) — 30,000 real orders. Research trends, not a store.</p>
       </div>
+    </div>
+
+    <div class="explainer">
+      <span class="explainer-icon">📊</span>
+      <span>This is <strong>market research data</strong> — real sales trends from 30K global orders. It is <strong>not a store</strong>. To buy shoes, go to <router-link to="/browse" class="explainer-link">Browse</router-link>.</span>
     </div>
 
     <div class="panel">
       <div class="toolbar">
         <div class="tabs">
-          <button class="tab" :class="{ active: activeTab === 'shoes' }" @click="activeTab='shoes'; resetPaging(); setSort('total_revenue_usd')">Catalog</button>
+          <button class="tab" :class="{ active: activeTab === 'shoes' }" @click="activeTab='shoes'; resetPaging(); setSort('total_revenue_usd')">Shoes</button>
           <button class="tab" :class="{ active: activeTab === 'orders' }" @click="activeTab='orders'; resetPaging(); setSort('revenue_usd')">Orders (Raw)</button>
         </div>
 
@@ -301,12 +303,7 @@ function resetPaging() {
               </div>
 
               <div class="actions">
-                  <button
-                    class="buy-btn"
-                    @click="addToCart({ id: s.key, name: `${s.brand} ${s.model_name}`, price: priceForShoe(s).current, image: photoForShoe(s), vendorUid: '__dataset__', vendorName: 'Dataset catalog' })"
-                  >
-                    Add to cart
-                  </button>
+                <router-link to="/browse" class="browse-link">Find on marketplace →</router-link>
               </div>
             </div>
           </div>
@@ -319,6 +316,23 @@ function resetPaging() {
 
 <style scoped>
 .analytics-page { max-width: 1100px; margin: 0 auto; padding: 24px 16px 80px; }
+.explainer {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(156, 255, 0, 0.06);
+  border: 1px solid rgba(156, 255, 0, 0.2);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.explainer strong { color: var(--text); }
+.explainer-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+.explainer-link { color: var(--accent); text-decoration: none; font-weight: 700; }
+.explainer-link:hover { text-decoration: underline; }
 .hero {
   position: relative;
   border-radius: 18px;
@@ -369,10 +383,23 @@ function resetPaging() {
 .table tr:hover td { background: rgba(156, 255, 0, 0.03); }
 .click { cursor: pointer; user-select: none; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85rem; }
-.shoe-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+.shoe-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 14px; }
 .shoe-card { display: grid; grid-template-columns: 120px 1fr; gap: 12px; border-radius: 16px; overflow: hidden; border: 1px solid rgba(156, 255, 0, 0.12); background: rgba(255,255,255,0.02); }
 .shoe-img { width: 120px; height: 120px; object-fit: cover; display: block; }
 .shoe-meta { padding: 12px 12px 12px 0; }
+
+@media (max-width: 480px) {
+  .shoe-card { grid-template-columns: 1fr; }
+  .shoe-img { width: 100%; height: 160px; }
+  .shoe-meta { padding: 12px; }
+  .analytics-page { padding: 16px 12px 60px; }
+  .panel { padding: 12px; }
+  .search { min-width: 0; width: 100%; }
+  .toolbar { flex-direction: column; align-items: stretch; }
+  .tabs { width: 100%; }
+  .pager { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .pager__right { flex-wrap: wrap; }
+}
 .shoe-title { color: var(--text); font-weight: 900; }
 .shoe-sub { color: var(--muted); font-size: 0.82rem; margin-top: 4px; }
 .price-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 10px; }
@@ -384,17 +411,21 @@ function resetPaging() {
 .move.down { color: var(--danger); }
 .move.flat { color: var(--muted); }
 .actions { margin-top: 10px; }
-.buy-btn {
+.browse-link {
+  display: block;
   width: 100%;
   padding: 9px 12px;
   border-radius: 10px;
   border: 1px solid rgba(156, 255, 0, 0.18);
-  background: rgba(156, 255, 0, 0.10);
-  color: var(--text);
-  font-weight: 900;
-  cursor: pointer;
+  background: rgba(156, 255, 0, 0.06);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-decoration: none;
+  text-align: center;
+  box-sizing: border-box;
 }
-.buy-btn:hover { opacity: 0.92; }
+.browse-link:hover { background: rgba(156, 255, 0, 0.12); }
 .shoe-kpis { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; color: var(--muted); font-size: 0.8rem; }
 .shoe-kpis strong { color: var(--text); }
 </style>

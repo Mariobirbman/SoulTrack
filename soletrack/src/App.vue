@@ -2,11 +2,13 @@
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '@/lib/auth'
+import { useRole } from '@/lib/role'
 import FirebaseStatusBanner from '@/components/FirebaseStatusBanner.vue'
 import Footer from '@/components/Footer.vue'
 import { useCart } from '@/lib/cart'
 
 const { user } = useAuth()
+const { isAdmin } = useRole()
 const isLoggedIn = computed(() => !!user.value)
 const { totalCount } = useCart()
 
@@ -63,7 +65,7 @@ watch(() => route.fullPath, () => closeMenu())
           <li><router-link to="/" @click="closeMenu">Home</router-link></li>
           <li><router-link to="/browse" @click="closeMenu">Browse</router-link></li>
           <li><router-link to="/vendors" @click="closeMenu">Vendors</router-link></li>
-          <li><router-link to="/analytics" @click="closeMenu">Catalog</router-link></li>
+          <li><router-link to="/analytics" @click="closeMenu">Market Data</router-link></li>
           <li>
             <router-link to="/cart" class="cart-link" @click="closeMenu">
               Cart
@@ -89,6 +91,7 @@ watch(() => route.fullPath, () => closeMenu())
               <li><router-link to="/account" @click="closeMenu">My Account</router-link></li>
               <li><router-link to="/sell" @click="closeMenu">Sell a Shoe</router-link></li>
               <li><router-link to="/orders" @click="closeMenu">My Orders</router-link></li>
+              <li v-if="isAdmin"><router-link to="/admin" @click="closeMenu" class="admin-link">Admin Panel</router-link></li>
             </ul>
           </li>
 
@@ -97,6 +100,7 @@ watch(() => route.fullPath, () => closeMenu())
             <li class="mobile-account-link"><router-link to="/account" @click="closeMenu">My Account</router-link></li>
             <li class="mobile-account-link"><router-link to="/sell" @click="closeMenu">Sell a Shoe</router-link></li>
             <li class="mobile-account-link"><router-link to="/orders" @click="closeMenu">My Orders</router-link></li>
+            <li v-if="isAdmin" class="mobile-account-link"><router-link to="/admin" @click="closeMenu">Admin Panel</router-link></li>
           </template>
         </ul>
       </div>
@@ -319,6 +323,8 @@ nav a.router-link-exact-active { color: var(--accent); }
   color: var(--muted) !important;
   width: 100%;
 }
+
+.account-dropdown .admin-link { color: var(--accent) !important; }
 
 .account-dropdown a:hover {
   color: var(--text) !important;

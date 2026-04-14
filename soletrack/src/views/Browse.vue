@@ -4,180 +4,13 @@ import { useRoute } from 'vue-router'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db, firebaseConfigured } from '@/lib/firebase'
 import { useCart } from '@/lib/cart'
+import { demoProducts } from '@/lib/demoMarketplace'
+import type { DemoProduct } from '@/lib/demoMarketplace'
+import { getOrSeedDemoProducts } from '@/lib/demoStore'
 
-interface Product {
-  id: string
-  vendorUid?: string
-  vendorName?: string
-  name: string
-  brand: string
-  size?: string
-  price: number
-  retailPrice?: number
-  condition?: 'New' | 'Used' | 'DS'
-  image?: string
-  platform?: string
-  colorway?: string
-  sku?: string
-  soldCount?: number
-  description?: string
-}
+type Product = DemoProduct
 
-const products = ref<Product[]>([
-  {
-    id: '1',
-    name: 'Air Jordan 1 Retro High OG',
-    brand: 'Jordan',
-    size: '10',
-    price: 289,
-    retailPrice: 180,
-    condition: 'DS',
-    image: 'https://images.unsplash.com/photo-aDZ5YIuedQg?w=600&q=80&auto=format&fit=crop',
-    platform: 'StockX',
-    colorway: 'Chicago / Red Black',
-    sku: '555088-101',
-    vendorUid: '__demo__kickvault',
-    vendorName: 'KickVault',
-    soldCount: 142,
-    description: 'The iconic AJ1 High OG in classic colorway. Deadstock, never worn. Original box included with all accessories.',
-  },
-  {
-    id: '2',
-    name: 'Nike Dunk Low Retro',
-    brand: 'Nike',
-    size: '9.5',
-    price: 145,
-    retailPrice: 110,
-    condition: 'New',
-    image: 'https://images.unsplash.com/photo-g1vk_Bef2Xk?w=600&q=80&auto=format&fit=crop',
-    platform: 'GOAT',
-    colorway: 'White / Black Panda',
-    sku: 'DD1391-100',
-    vendorUid: '__demo__solesource',
-    vendorName: 'SoleSource',
-    soldCount: 87,
-    description: 'Clean Panda Dunk Low. Tried on once indoors. No creases, no dirt. Box slightly dented but shoe is perfect.',
-  },
-  {
-    id: '3',
-    name: 'Adidas Yeezy Boost 350 V2',
-    brand: 'Adidas',
-    size: '11',
-    price: 320,
-    retailPrice: 230,
-    condition: 'DS',
-    image: 'https://images.unsplash.com/photo-hVlyfxnH56k?w=600&q=80&auto=format&fit=crop',
-    platform: 'StockX',
-    colorway: 'Zebra',
-    sku: 'CP9654',
-    vendorUid: '__demo__yzydealer',
-    vendorName: 'YZYDealer',
-    soldCount: 205,
-    description: 'Zebra 350 V2 — one of the most sought-after Yeezy colorways. Deadstock with original receipt.',
-  },
-  {
-    id: '4',
-    name: 'Jordan 4 Retro Military Blue',
-    brand: 'Jordan',
-    size: '10.5',
-    price: 410,
-    retailPrice: 210,
-    condition: 'DS',
-    image: 'https://images.unsplash.com/photo-F45w1xY42BY?w=600&q=80&auto=format&fit=crop',
-    platform: 'eBay',
-    colorway: 'Military Blue',
-    sku: 'DH6927-111',
-    vendorUid: '__demo__retroracks',
-    vendorName: 'RetroRacks',
-    soldCount: 63,
-    description: 'OG Military Blue 4 — cleaned up retro of the classic 1989 colorway. DS with box and extra laces.',
-  },
-  {
-    id: '5',
-    name: 'Nike Air Max 90',
-    brand: 'Nike',
-    size: '9',
-    price: 110,
-    retailPrice: 130,
-    condition: 'Used',
-    image: 'https://images.unsplash.com/photo-Ao1AP2UvVnE?w=600&q=80&auto=format&fit=crop',
-    platform: 'Local',
-    colorway: 'Infrared',
-    sku: 'CT1685-100',
-    vendorUid: '__demo__solesource',
-    vendorName: 'SoleSource',
-    soldCount: 31,
-    description: 'Light use, still looking clean. Minor sole yellowing, no major scuffs. Great daily beater.',
-  },
-  {
-    id: '6',
-    name: 'New Balance 550 White Green',
-    brand: 'New Balance',
-    size: '10',
-    price: 130,
-    retailPrice: 110,
-    condition: 'New',
-    image: 'https://images.unsplash.com/photo-3bBihBr7wRE?w=600&q=80&auto=format&fit=crop',
-    platform: 'GOAT',
-    colorway: 'White / Green',
-    sku: 'BB550WT1',
-    vendorUid: '__demo__nbvault',
-    vendorName: 'NB Vault',
-    soldCount: 54,
-    description: 'Clean 550 colorway in crispy white/green. Brand new, never worn. Original box and paper.',
-  },
-  {
-    id: '7',
-    name: 'Air Jordan 3 Retro Fire Red',
-    brand: 'Jordan',
-    size: '11',
-    price: 375,
-    retailPrice: 200,
-    condition: 'DS',
-    image: 'https://images.unsplash.com/photo-bIrDx0cAr14?w=600&q=80&auto=format&fit=crop',
-    platform: 'StockX',
-    colorway: 'Fire Red',
-    sku: 'CT8532-160',
-    vendorUid: '__demo__kickvault',
-    vendorName: 'KickVault',
-    soldCount: 98,
-    description: 'Fire Red 3 — one of the cleanest retros of the year. Elephant print looking sharp, all OG receipts included.',
-  },
-  {
-    id: '8',
-    name: 'Nike SB Dunk Low Travis Scott',
-    brand: 'Nike',
-    size: '10',
-    price: 850,
-    retailPrice: 150,
-    condition: 'DS',
-    image: 'https://images.unsplash.com/photo-sA5wcAu4CBA?w=600&q=80&auto=format&fit=crop',
-    platform: 'StockX',
-    colorway: 'Brown / Sail',
-    sku: 'CT5053-200',
-    vendorUid: '__demo__cactuskicks',
-    vendorName: 'CactusKicks',
-    soldCount: 19,
-    description: 'Highly coveted Travis Scott SB collab. Reverse Swoosh, hidden pocket under the tongue. DS, never worn.',
-  },
-  {
-    id: '9',
-    name: 'Adidas Forum Low x Bad Bunny',
-    brand: 'Adidas',
-    size: '9',
-    price: 290,
-    retailPrice: 160,
-    condition: 'New',
-    image: 'https://images.unsplash.com/photo-NRA25SWe71o?w=600&q=80&auto=format&fit=crop',
-    platform: 'GOAT',
-    colorway: 'Easter Egg',
-    sku: 'GW0265',
-    vendorUid: '__demo__solesource',
-    vendorName: 'SoleSource',
-    soldCount: 44,
-    description: 'Bad Bunny x Forum Low in the Easter Egg colorway. Tried on once for photos. Pristine condition.',
-  },
-])
+const products = ref<Product[]>(demoProducts)
 
 const loading = ref(false)
 const loadError = ref('')
@@ -186,27 +19,28 @@ let stopProductsListener: (() => void) | null = null
 onMounted(() => {
   loading.value = true
   if (!firebaseConfigured || !db) {
-    loadError.value = 'Firebase is not configured (showing demo data).'
+    // Show fixed demo marketplace + any user-approved demo-store listings
+    const approvedFromStore = getOrSeedDemoProducts().filter((p) => (p as any).status === 'approved')
+    const demoIds = new Set(demoProducts.map((d) => d.id))
+    const storeOnly = approvedFromStore.filter((p) => !demoIds.has(p.id))
+    products.value = [...(storeOnly as any), ...demoProducts]
+    loadError.value = ''
     loading.value = false
     return
   }
-  const q = query(collection(db, 'products'), where('active', '!=', false))
+  // Only show admin-approved listings in the public feed
+  const q = query(collection(db, 'products'), where('status', '==', 'approved'))
   stopProductsListener = onSnapshot(
     q,
     (snap) => {
-      const remote = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Product, 'id'>) }))
-      const active = remote.filter(
-        (p) =>
-          (p as any).active !== false &&
-          typeof (p as any).vendorUid === 'string' &&
-          String((p as any).vendorUid).length > 0,
-      )
-      if (active.length) {
-        products.value = active
-        loadError.value = ''
-      } else {
-        loadError.value = 'No live listings yet — showing demo products.'
-      }
+      const approved = snap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as Omit<Product, 'id'>) }))
+        .filter((p) => typeof (p as any).vendorUid === 'string' && (p as any).vendorUid.length > 0)
+      // Always show fixed demos; prepend any real approved listings on top
+      const demoIds = new Set(demoProducts.map((d) => d.id))
+      const realOnly = approved.filter((p) => !demoIds.has(p.id))
+      products.value = [...realOnly, ...demoProducts]
+      loadError.value = ''
       loading.value = false
     },
     () => {
@@ -502,7 +336,7 @@ function addProductToCart(p: Product) {
 
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
   gap: 20px;
 }
 
@@ -724,4 +558,12 @@ function addProductToCart(p: Product) {
 
 .toast-enter-active, .toast-leave-active { transition: opacity 0.25s, transform 0.25s; }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(8px); }
+
+@media (max-width: 600px) {
+  .browse-page { padding: 20px 12px 60px; }
+  .search-input { min-width: 0; width: 100%; }
+  .filter-select { flex: 1; min-width: 0; }
+  .product-footer { flex-direction: column; }
+  .product-footer .btn { width: 100%; justify-content: center; }
+}
 </style>

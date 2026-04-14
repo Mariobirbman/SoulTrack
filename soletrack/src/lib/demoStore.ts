@@ -135,20 +135,23 @@ export function saveDemoVendor(vendor: DemoVendorProfile) {
   window.localStorage.setItem(VENDOR_KEY, safeJsonStringify(vendor))
 }
 
-export function getOrSeedDemoProducts(): Array<{ id: string } & Omit<DemoProduct, 'id'>> {
+// Products stored in demo mode include a `status` field for the admin approval flow
+type DemoProductStored = { id: string; status?: string } & Omit<DemoProduct, 'id'>
+
+export function getOrSeedDemoProducts(): DemoProductStored[] {
   if (typeof window === 'undefined') return []
-  const existing = safeJsonParse<Array<{ id: string } & Omit<DemoProduct, 'id'>>>(
-    window.localStorage.getItem(PRODUCTS_KEY),
-  )
+  const existing = safeJsonParse<DemoProductStored[]>(window.localStorage.getItem(PRODUCTS_KEY))
   if (Array.isArray(existing) && existing.length) return existing
 
   const v = getOrSeedDemoVendor()
-  const seeded: Array<{ id: string } & Omit<DemoProduct, 'id'>> = [
+
+  // Seed two approved listings (vendor's existing stock) + two pending ones (just submitted)
+  const seeded: DemoProductStored[] = [
     {
       id: 'prod-1',
       vendorUid: '__demo__me',
       vendorName: v.name,
-      name: 'Jordan 4 Retro “Midnight”',
+      name: 'Jordan 4 Retro "Midnight"',
       brand: 'Jordan',
       size: '10.5',
       price: 365,
@@ -160,12 +163,13 @@ export function getOrSeedDemoProducts(): Array<{ id: string } & Omit<DemoProduct
       sku: 'DJ-004',
       soldCount: 12,
       description: 'Brand new pair. Box included. Same-day meetup.',
+      status: 'approved',
     },
     {
       id: 'prod-2',
       vendorUid: '__demo__me',
       vendorName: v.name,
-      name: 'Nike Dunk Low “Forest”',
+      name: 'Nike Dunk Low "Forest"',
       brand: 'Nike',
       size: '9.5',
       price: 155,
@@ -177,23 +181,80 @@ export function getOrSeedDemoProducts(): Array<{ id: string } & Omit<DemoProduct
       sku: 'NK-204',
       soldCount: 22,
       description: 'Clean colorway, great flip. Pickup preferred.',
+      status: 'approved',
+    },
+    // Pending listings — ready for admin review
+    {
+      id: 'prod-pending-1',
+      vendorUid: '__demo__me',
+      vendorName: v.name,
+      name: 'Adidas Yeezy Boost 350 V2 "Bone"',
+      brand: 'Adidas',
+      size: '10',
+      price: 280,
+      retailPrice: 230,
+      condition: 'DS',
+      image: '/images/shoes/generated-03.webp',
+      platform: 'Local',
+      colorway: 'Bone / White',
+      sku: 'AD-350',
+      description: 'Deadstock, never tried on. Receipt included.',
+      status: 'pending',
+    },
+    {
+      id: 'prod-pending-2',
+      vendorUid: '__demo__me',
+      vendorName: v.name,
+      name: 'New Balance 992 Grey',
+      brand: 'New Balance',
+      size: '11',
+      price: 320,
+      retailPrice: 185,
+      condition: 'New',
+      image: '/images/shoes/generated-06.webp',
+      platform: 'Local',
+      colorway: 'Grey / Silver',
+      sku: 'NB-992',
+      description: 'Retail price was $185. Asking $320. Box included.',
+      status: 'pending',
     },
   ]
   window.localStorage.setItem(PRODUCTS_KEY, safeJsonStringify(seeded))
   return seeded
 }
 
-export function saveDemoProducts(products: Array<{ id: string } & Omit<DemoProduct, 'id'>>) {
+export function saveDemoProducts(products: DemoProductStored[]) {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(PRODUCTS_KEY, safeJsonStringify(products))
 }
 
-export function upsertDemoProduct(p: { id?: string } & Omit<DemoProduct, 'id'>) {
+export function getDemoPendingProducts(): DemoProductStored[] {
+  return getOrSeedDemoProducts().filter((p) => p.status === 'pending')
+}
+
+export function approveDemoProduct(id: string) {
+  const current = getOrSeedDemoProducts()
+  const next = current.map((p) => (p.id === id ? { ...p, status: 'approved' } : p))
+  saveDemoProducts(next)
+  return next
+}
+
+export function rejectDemoProduct(id: string, note?: string) {
+  const current = getOrSeedDemoProducts()
+  const next = current.map((p) =>
+    p.id === id ? { ...p, status: 'rejected', rejectNote: note ?? null } : p,
+  )
+  saveDemoProducts(next)
+  return next
+}
+
+export function upsertDemoProduct(p: { id?: string; status?: string } & Omit<DemoProduct, 'id'>) {
   const current = getOrSeedDemoProducts()
   const id = p.id ?? `prod-${Date.now()}`
+  const entry: DemoProductStored = { id, status: p.status ?? 'pending', ...p }
   const next = current.some((x) => x.id === id)
-    ? current.map((x) => (x.id === id ? { id, ...p } : x))
-    : [{ id, ...p }, ...current]
+    ? current.map((x) => (x.id === id ? entry : x))
+    : [entry, ...current]
   saveDemoProducts(next)
   return next
 }
@@ -245,8 +306,8 @@ export function addDemoSampleListings(vendorUid: string, vendorName: string) {
       platform: 'Local',
     },
   ]
-  const next = [...samples.map((s, i) => ({ id: `prod-${Date.now()}-${i}`, ...s })), ...current]
+  // New vendor-submitted listings start as pending, awaiting admin review
+  const next = [...samples.map((s, i) => ({ id: `prod-${Date.now()}-${i}`, status: 'pending', ...s })), ...current]
   saveDemoProducts(next)
   return next
 }
-

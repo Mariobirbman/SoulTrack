@@ -250,5 +250,12 @@ async function placeOrders() {
 }
 .btn.primary { background: var(--accent); border-color: transparent; color: #0b1205; width: 100%; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+@media (max-width: 600px) {
+  .checkout-page { padding: 20px 12px 60px; }
+  .head { flex-wrap: wrap; }
+  .panel { padding: 14px; }
+  .line { grid-template-columns: 28px 1fr auto; }
+}
 </style>
 

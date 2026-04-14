@@ -246,7 +246,7 @@ function buyNow(p: { id: string } & ProductDoc) {
 .empty { padding: 28px 0; }
 .muted { color: var(--muted); }
 
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 16px; }
 .card { border: 1px solid rgba(156, 255, 0, 0.12); border-radius: 16px; overflow: hidden; background: rgba(255,255,255,0.02); }
 .img { width: 100%; height: 190px; object-fit: cover; display: block; }
 .info { padding: 14px; }
@@ -291,4 +291,11 @@ function buyNow(p: { id: string } & ProductDoc) {
 
 .toast-enter-active, .toast-leave-active { transition: opacity 0.25s, transform 0.25s; }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(8px); }
+
+@media (max-width: 600px) {
+  .hero { padding: 52px 16px 32px; min-height: auto; }
+  .body { padding: 24px 12px 60px; }
+  .card-actions { flex-direction: column; }
+  .card-actions .btn { width: 100%; }
+}
 </style>
