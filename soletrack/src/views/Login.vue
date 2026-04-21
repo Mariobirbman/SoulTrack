@@ -12,10 +12,10 @@ import {
 } from 'firebase/auth'
 import { auth, firebaseConfigured } from '@/lib/firebase'
 import { upsertUserProfile } from '@/lib/profile'
-import { disableDemoMode, enableDemoAdminMode, enableDemoMode, isDemoAdmin, isDemoMode } from '@/lib/demo'
+import { disableDemoMode, enableDemoBuyerMode, enableDemoMode, isDemoBuyer, isDemoMode } from '@/lib/demo'
 
 const demoActive = ref(isDemoMode())
-const demoIsAdmin = ref(isDemoAdmin())
+const demoIsBuyer = ref(isDemoBuyer())
 
 const router = useRouter()
 const route = useRoute()
@@ -99,9 +99,9 @@ function enterDemoUser() {
   window.location.assign(nextPath())
 }
 
-function enterDemoAdmin() {
-  enableDemoAdminMode()
-  window.location.assign('/admin')
+function enterDemoBuyer() {
+  enableDemoBuyerMode()
+  window.location.assign('/browse')
 }
 
 function exitDemoMode() {
@@ -220,22 +220,22 @@ async function loginWithGoogleRedirect() {
     <div class="demo-callout">
       <div class="demo-copy">
         <strong>Demo Mode</strong>
-        <span class="demo-sub">No account needed — pick a role and explore.</span>
+        <span class="demo-sub">No account needed — pick a role to demo the full flow.</span>
       </div>
       <div v-if="!demoActive" class="demo-btns">
-        <button class="btnDemo user" type="button" @click="enterDemoUser">
-          Login as User
+        <button class="btnDemo seller" type="button" @click="enterDemoUser">
+          Seller
         </button>
-        <button class="btnDemo admin" type="button" @click="enterDemoAdmin">
-          Login as Admin
+        <button class="btnDemo buyer" type="button" @click="enterDemoBuyer">
+          Buyer
         </button>
       </div>
       <div v-else class="demo-active-row">
-        <span class="demo-role-tag" :class="demoIsAdmin ? 'admin' : 'user'">
-          {{ demoIsAdmin ? 'Admin' : 'User' }} demo active
+        <span class="demo-role-tag" :class="demoIsBuyer ? 'buyer' : 'seller'">
+          {{ demoIsBuyer ? 'Buyer' : 'Seller' }} active
         </span>
         <button class="btnDemo exit" type="button" @click="exitDemoMode">
-          Exit demo
+          Switch role
         </button>
       </div>
     </div>
@@ -313,24 +313,24 @@ async function loginWithGoogleRedirect() {
   border-radius: 6px;
   letter-spacing: 0.04em;
 }
-.demo-role-tag.admin { background: rgba(156,255,0,0.12); color: var(--accent); border: 1px solid rgba(156,255,0,0.3); }
-.demo-role-tag.user  { background: rgba(100,180,255,0.12); color: #7ecfff; border: 1px solid rgba(100,180,255,0.3); }
+.demo-role-tag.seller { background: rgba(255,180,0,0.10);   color: #f5a623;       border: 1px solid rgba(255,180,0,0.3); }
+.demo-role-tag.buyer  { background: rgba(100,180,255,0.12); color: #7ecfff;       border: 1px solid rgba(100,180,255,0.3); }
 
 .btnDemo {
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(156, 255, 0, 0.22);
-  background: rgba(156, 255, 0, 0.10);
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: transparent;
   color: var(--text);
   cursor: pointer;
   font-weight: 800;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   white-space: nowrap;
 }
-.btnDemo.user  { border-color: rgba(100,180,255,0.3); background: rgba(100,180,255,0.08); }
-.btnDemo.admin { border-color: rgba(156,255,0,0.3);   background: rgba(156,255,0,0.10); }
-.btnDemo.exit  { border-color: rgba(255,80,80,0.3);   background: rgba(255,80,80,0.06);  color: var(--danger); }
-.btnDemo:hover { opacity: 0.85; }
+.btnDemo.seller { border-color: rgba(255,180,0,0.3);   color: #f5a623; }
+.btnDemo.buyer  { border-color: rgba(100,180,255,0.3); color: #7ecfff; }
+.btnDemo.exit   { border-color: rgba(255,80,80,0.3);   color: var(--danger); }
+.btnDemo:hover  { opacity: 0.8; }
 .auth-container {
   max-width: 520px;
   margin: 0 auto;

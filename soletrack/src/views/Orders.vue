@@ -3,7 +3,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { useRoute } from 'vue-router'
 import { useAuth } from '@/lib/auth'
-import { db, firebaseConfigured } from '@/lib/firebase'
+import { db, demoMode, firebaseConfigured } from '@/lib/firebase'
+import { getDemoBuyerOrders } from '@/lib/demoStore'
 
 type VendorOrder = {
   checkoutId: string
@@ -30,6 +31,7 @@ function tsToMs(ts: any) {
   if (!ts) return 0
   if (typeof ts.toMillis === 'function') return ts.toMillis()
   if (typeof ts.seconds === 'number') return ts.seconds * 1000
+  if (typeof ts === 'string') return new Date(ts).getTime() // ISO string (demo mode)
   return 0
 }
 
@@ -42,13 +44,22 @@ function fmtDate(ts: any) {
 onMounted(() => {
   ;(async () => {
     await ready
-    if (!firebaseConfigured || !db) {
-      loadError.value = 'Firebase is not configured yet.'
+    if (!user.value) {
+      loadError.value = 'Login required.'
       loading.value = false
       return
     }
-    if (!user.value) {
-      loadError.value = 'Login required.'
+
+    // ── Demo mode: load from localStorage ───────────────────────────────────
+    if (demoMode) {
+      orders.value = getDemoBuyerOrders(user.value.uid) as any
+      loading.value = false
+      return
+    }
+
+    // ── Firebase mode ────────────────────────────────────────────────────────
+    if (!firebaseConfigured || !db) {
+      loadError.value = 'Firebase is not configured yet.'
       loading.value = false
       return
     }
@@ -85,7 +96,7 @@ const grouped = computed(() => {
     .map(([checkoutId, list]) => ({
       checkoutId,
       list: list.sort((a, b) => (a.vendorName ?? '').localeCompare(b.vendorName ?? '')),
-      createdAt: list.reduce((best, o) => (tsToMs(o.createdAt) > tsToMs(best) ? o.createdAt : best), list[0]?.createdAt),
+      createdAt: list.reduce((best, o) => (tsToMs(o.createdAt) > tsToMs(best) ? o.createdAt : best), list[0]!.createdAt),
     }))
     .sort((a, b) => tsToMs(b.createdAt) - tsToMs(a.createdAt))
 })
@@ -96,7 +107,7 @@ const grouped = computed(() => {
     <div class="head">
       <div>
         <h1 class="title">My Orders</h1>
-        <p class="sub">Demo orders grouped by checkout session.</p>
+        <p class="sub">Your orders, grouped by checkout session.</p>
       </div>
       <router-link class="btn" to="/browse">Continue shopping</router-link>
     </div>

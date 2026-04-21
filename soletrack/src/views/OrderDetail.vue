@@ -12,7 +12,13 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useAuth } from '@/lib/auth'
-import { db, firebaseConfigured } from '@/lib/firebase'
+import { db, demoMode, firebaseConfigured } from '@/lib/firebase'
+import {
+  addDemoMessage,
+  getDemoMessages,
+  getDemoOrderById,
+  updateDemoOrderStatus,
+} from '@/lib/demoStore'
 
 type VendorOrder = {
   checkoutId: string
@@ -56,6 +62,7 @@ function tsToMs(ts: any) {
   if (!ts) return 0
   if (typeof ts.toMillis === 'function') return ts.toMillis()
   if (typeof ts.seconds === 'number') return ts.seconds * 1000
+  if (typeof ts === 'string') return new Date(ts).getTime()
   return 0
 }
 function fmtDate(ts: any) {
@@ -90,10 +97,16 @@ const advancing = ref(false)
 const advanceError = ref('')
 
 async function advanceStatus() {
-  if (!firebaseConfigured || !db || !user.value || !order.value || !nextStatus.value) return
+  if (!order.value || !nextStatus.value) return
   advancing.value = true
   advanceError.value = ''
   try {
+    if (demoMode) {
+      const updated = updateDemoOrderStatus(id.value, nextStatus.value)
+      if (updated) order.value = { ...order.value, status: updated.status }
+      return
+    }
+    if (!firebaseConfigured || !db || !user.value) return
     await updateDoc(doc(db, 'vendorOrders', id.value), { status: nextStatus.value })
   } catch {
     advanceError.value = 'Could not update order status. Please try again.'
@@ -105,13 +118,29 @@ async function advanceStatus() {
 onMounted(() => {
   ;(async () => {
     await ready
-    if (!firebaseConfigured || !db) {
-      loadError.value = 'Firebase is not configured yet.'
+    if (!user.value) {
+      router.push('/login')
+      return
+    }
+
+    // ── Demo mode ────────────────────────────────────────────────────────────
+    if (demoMode) {
+      const demoOrder = getDemoOrderById(id.value)
+      if (!demoOrder) {
+        loadError.value = 'Order not found.'
+        loading.value = false
+        return
+      }
+      order.value = demoOrder as any
+      messages.value = getDemoMessages(id.value).map((m) => ({ ...m })) as any
       loading.value = false
       return
     }
-    if (!user.value) {
-      router.push('/login')
+
+    // ── Firebase mode ────────────────────────────────────────────────────────
+    if (!firebaseConfigured || !db) {
+      loadError.value = 'Firebase is not configured yet.'
+      loading.value = false
       return
     }
 
@@ -140,9 +169,7 @@ onMounted(() => {
       (snap) => {
         messages.value = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Message) }))
       },
-      () => {
-        // ignore chat load errors for now
-      },
+      () => {},
     )
   })()
 })
@@ -153,11 +180,17 @@ onBeforeUnmount(() => {
 })
 
 async function send() {
-  if (!firebaseConfigured || !db || !user.value) return
   const text = msg.value.trim()
-  if (!text) return
+  if (!text || !user.value) return
   sending.value = true
   try {
+    if (demoMode) {
+      const updated = addDemoMessage(id.value, { senderUid: user.value.uid, text })
+      messages.value = updated.map((m) => ({ ...m })) as any
+      msg.value = ''
+      return
+    }
+    if (!firebaseConfigured || !db) return
     await addDoc(collection(db, 'vendorOrders', id.value, 'messages'), {
       senderUid: user.value.uid,
       text,
@@ -165,7 +198,7 @@ async function send() {
     })
     msg.value = ''
   } catch {
-    // keep it simple for demo
+    // keep it simple
   } finally {
     sending.value = false
   }

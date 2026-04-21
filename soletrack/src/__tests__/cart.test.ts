@@ -14,7 +14,7 @@ describe('cart — add', () => {
     const { items, add } = freshCart()
     add({ id: 'p1', name: 'Jordan 1', price: 200, vendorUid: 'v1', vendorName: 'Shop A' })
     expect(items.value).toHaveLength(1)
-    expect(items.value[0].qty).toBe(1)
+    expect(items.value[0]!.qty).toBe(1)
   })
 
   it('increments qty when the same id is added again', () => {
@@ -22,14 +22,14 @@ describe('cart — add', () => {
     add({ id: 'p1', name: 'Jordan 1', price: 200, vendorUid: 'v1', vendorName: 'Shop A' })
     add({ id: 'p1', name: 'Jordan 1', price: 200, vendorUid: 'v1', vendorName: 'Shop A' })
     expect(items.value).toHaveLength(1)
-    expect(items.value[0].qty).toBe(2)
+    expect(items.value[0]!.qty).toBe(2)
   })
 
   it('updates price on re-add (guards against stale prices)', () => {
     const { items, add } = freshCart()
     add({ id: 'p1', name: 'Jordan 1', price: 200, vendorUid: 'v1', vendorName: 'Shop A' })
     add({ id: 'p1', name: 'Jordan 1', price: 220, vendorUid: 'v1', vendorName: 'Shop A' })
-    expect(items.value[0].price).toBe(220)
+    expect(items.value[0]!.price).toBe(220)
   })
 
   it('adds distinct items separately', () => {
@@ -42,13 +42,13 @@ describe('cart — add', () => {
   it('clamps qty to at least 1', () => {
     const { items, add } = freshCart()
     add({ id: 'p1', name: 'Jordan 1', price: 200 }, 0)
-    expect(items.value[0].qty).toBe(1)
+    expect(items.value[0]!.qty).toBe(1)
   })
 
   it('floors fractional qty', () => {
     const { items, add } = freshCart()
     add({ id: 'p1', name: 'Jordan 1', price: 200 }, 2.9)
-    expect(items.value[0].qty).toBe(2)
+    expect(items.value[0]!.qty).toBe(2)
   })
 })
 
@@ -59,7 +59,7 @@ describe('cart — remove', () => {
     add({ id: 'p2', name: 'Dunk Low', price: 150 })
     remove('p1')
     expect(items.value).toHaveLength(1)
-    expect(items.value[0].id).toBe('p2')
+    expect(items.value[0]!.id).toBe('p2')
   })
 
   it('is a no-op when id does not exist', () => {
@@ -75,28 +75,28 @@ describe('cart — setQty', () => {
     const { items, add, setQty } = freshCart()
     add({ id: 'p1', name: 'Jordan 1', price: 200 })
     setQty('p1', 5)
-    expect(items.value[0].qty).toBe(5)
+    expect(items.value[0]!.qty).toBe(5)
   })
 
   it('clamps qty to at least 1', () => {
     const { items, add, setQty } = freshCart()
     add({ id: 'p1', name: 'Jordan 1', price: 200 })
     setQty('p1', 0)
-    expect(items.value[0].qty).toBe(1)
+    expect(items.value[0]!.qty).toBe(1)
   })
 
   it('floors fractional qty', () => {
     const { items, add, setQty } = freshCart()
     add({ id: 'p1', name: 'Jordan 1', price: 200 })
     setQty('p1', 3.7)
-    expect(items.value[0].qty).toBe(3)
+    expect(items.value[0]!.qty).toBe(3)
   })
 
   it('is a no-op for unknown id', () => {
     const { items, add, setQty } = freshCart()
     add({ id: 'p1', name: 'Jordan 1', price: 200 })
     expect(() => setQty('ghost', 3)).not.toThrow()
-    expect(items.value[0].qty).toBe(1)
+    expect(items.value[0]!.qty).toBe(1)
   })
 })
 

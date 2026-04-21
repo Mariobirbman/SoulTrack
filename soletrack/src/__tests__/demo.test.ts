@@ -30,16 +30,16 @@ describe('demo mode helpers', () => {
     expect(isDemoAdmin()).toBe(false)
   })
 
-  it('enableDemoAdminMode sets both isDemoMode and isDemoAdmin', () => {
+  it('enableDemoAdminMode falls back to standard demo mode', () => {
     enableDemoAdminMode()
     expect(isDemoMode()).toBe(true)
-    expect(isDemoAdmin()).toBe(true)
+    expect(isDemoAdmin()).toBe(false)
   })
 
-  it('disableDemoMode clears both keys', () => {
+  it('disableDemoMode clears demo keys', () => {
     enableDemoAdminMode()
     expect(isDemoMode()).toBe(true)
-    expect(isDemoAdmin()).toBe(true)
+    expect(isDemoAdmin()).toBe(false)
 
     disableDemoMode()
     expect(isDemoMode()).toBe(false)
@@ -51,10 +51,10 @@ describe('demo mode helpers', () => {
     expect(isDemoMode()).toBe(false)
   })
 
-  it('raw localStorage keys match expected values', () => {
+  it('raw localStorage keys do not persist admin mode', () => {
     enableDemoAdminMode()
     expect(localStorage.getItem(DEMO_KEY)).toBe('1')
-    expect(localStorage.getItem(DEMO_ADMIN_KEY)).toBe('1')
+    expect(localStorage.getItem(DEMO_ADMIN_KEY)).toBeNull()
   })
 
   it('enableDemoMode does not set admin key', () => {

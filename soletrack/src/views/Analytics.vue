@@ -13,6 +13,10 @@ const error = ref('')
 const rows = shallowRef<SalesOrderRow[]>([])
 
 const activeTab = ref<'orders' | 'shoes' | 'marketplace'>('marketplace')
+const isLiveMarketplaceData = computed(() => firebaseConfigured && !!db)
+const marketplaceDataModeLabel = computed(() =>
+  isLiveMarketplaceData.value ? 'Live Firestore (approved listings)' : 'Demo fallback data'
+)
 
 const search = ref('')
 const year = ref<'All' | string>('All')
@@ -136,16 +140,118 @@ const monthlyListings = computed(() => {
     .sort((a, b) => a.month.localeCompare(b.month))
 })
 
-const maxMonthCount = computed(() => Math.max(...monthlyListings.value.map((m) => m.count), 1))
+const listingShareByBrand = computed(() => {
+  const map: Record<string, { count: number; totalPrice: number }> = {}
+  for (const p of marketplaceProducts.value) {
+    const b = p.brand || 'Unknown'
+    if (!map[b]) map[b] = { count: 0, totalPrice: 0 }
+    map[b]!.count += 1
+    map[b]!.totalPrice += p.price ?? 0
+  }
+  const totalListings = marketplaceProducts.value.length
+  return Object.entries(map)
+    .map(([brand, { count, totalPrice }]) => ({
+      brand,
+      count,
+      avgPrice: Math.round(totalPrice / count),
+      pct: totalListings ? Math.round((count / totalListings) * 100) : 0,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6)
+})
 
-// AnalyticsData table rows — satisfies the required data table
+const listingTrend = computed(() => monthlyListings.value.slice(-6))
+const listingTrendMaxCount = computed(() => Math.max(...listingTrend.value.map((m) => m.count), 1))
+
+// AnalyticsData table rows — focused recent listing trend
 const analyticsData = computed(() =>
-  monthlyListings.value.map((m) => ({
+  listingTrend.value.map((m) => ({
     month: m.month,
     averagePrice: m.avgPrice,
     totalListings: m.count,
   }))
 )
+
+// ── Global market stats from the 30K CSV ─────────────────────────────────────
+
+const revenueByBrand = computed(() => {
+  const map: Record<string, number> = {}
+  for (const r of filteredOrders.value) {
+    map[r.brand] = (map[r.brand] ?? 0) + r.revenue_usd
+  }
+  const total = Object.values(map).reduce((a, b) => a + b, 0)
+  return Object.entries(map)
+    .map(([brand, rev]) => ({ brand, rev, pct: total ? Math.round((rev / total) * 100) : 0 }))
+    .sort((a, b) => b.rev - a.rev)
+})
+
+const revenueByCategory = computed(() => {
+  const map: Record<string, { rev: number; units: number }> = {}
+  for (const r of filteredOrders.value) {
+    const cat = r.category || 'Other'
+    if (!map[cat]) map[cat] = { rev: 0, units: 0 }
+    map[cat]!.rev += r.revenue_usd
+    map[cat]!.units += r.units_sold
+  }
+  const total = Object.values(map).reduce((a, b) => a + b.rev, 0)
+  return Object.entries(map)
+    .map(([cat, { rev, units }]) => ({ cat, rev, units, pct: total ? Math.round((rev / total) * 100) : 0 }))
+    .sort((a, b) => b.rev - a.rev)
+})
+
+const topCountries = computed(() => {
+  const map: Record<string, number> = {}
+  for (const r of filteredOrders.value) map[r.country] = (map[r.country] ?? 0) + r.revenue_usd
+  const total = Object.values(map).reduce((a, b) => a + b, 0)
+  return Object.entries(map)
+    .map(([country, rev]) => ({ country, rev, pct: total ? Math.round((rev / total) * 100) : 0 }))
+    .sort((a, b) => b.rev - a.rev)
+    .slice(0, 8)
+})
+
+const channelSplit = computed(() => {
+  let online = 0, retail = 0
+  for (const r of filteredOrders.value) {
+    if (r.sales_channel === 'Online') online += r.revenue_usd
+    else retail += r.revenue_usd
+  }
+  const total = online + retail
+  return {
+    online, retail, total,
+    onlinePct: total ? Math.round((online / total) * 100) : 0,
+    retailPct: total ? Math.round((retail / total) * 100) : 0,
+  }
+})
+
+const yearlyRevenue = computed(() => {
+  const map: Record<string, { rev: number; orders: number }> = {}
+  for (const r of filteredOrders.value) {
+    const yr = r.order_date.slice(0, 4)
+    if (!map[yr]) map[yr] = { rev: 0, orders: 0 }
+    map[yr]!.rev += r.revenue_usd
+    map[yr]!.orders += 1
+  }
+  return Object.entries(map)
+    .map(([yr, { rev, orders }]) => ({ yr, rev, orders }))
+    .sort((a, b) => a.yr.localeCompare(b.yr))
+})
+
+const maxYearRev = computed(() => Math.max(...yearlyRevenue.value.map((y) => y.rev), 1))
+const maxBrandRev = computed(() => Math.max(...revenueByBrand.value.map((b) => b.rev), 1))
+const maxCatRev = computed(() => Math.max(...revenueByCategory.value.map((c) => c.rev), 1))
+const maxCountryRev = computed(() => Math.max(...topCountries.value.map((c) => c.rev), 1))
+
+const incomeBreakdown = computed(() => {
+  const map: Record<string, number> = {}
+  for (const r of filteredOrders.value) {
+    const lvl = r.customer_income_level || 'Unknown'
+    map[lvl] = (map[lvl] ?? 0) + r.revenue_usd
+  }
+  const total = Object.values(map).reduce((a, b) => a + b, 0)
+  return Object.entries(map)
+    .map(([lvl, rev]) => ({ lvl, rev, pct: total ? Math.round((rev / total) * 100) : 0 }))
+    .sort((a, b) => b.rev - a.rev)
+})
 
 // Single pass over 30K rows to build all three filter option lists at once
 const filterOptions = computed(() => {
@@ -178,6 +284,124 @@ const filteredOrders = computed(() => {
     return hay.includes(q)
   })
 })
+
+const DASHBOARD_SAMPLE_LIMIT = 1200
+
+// Representative subset used by the dashboard panels to keep comparisons readable.
+const dashboardRows = computed<SalesOrderRow[]>(() => {
+  const source = filteredOrders.value
+  if (source.length <= DASHBOARD_SAMPLE_LIMIT) return source
+
+  const step = Math.ceil(source.length / DASHBOARD_SAMPLE_LIMIT)
+  const sample: SalesOrderRow[] = []
+  for (let i = 0; i < source.length; i += step) {
+    sample.push(source[i]!)
+    if (sample.length === DASHBOARD_SAMPLE_LIMIT) break
+  }
+  return sample
+})
+
+const dashboardSampleMeta = computed(() => {
+  const total = filteredOrders.value.length
+  const used = dashboardRows.value.length
+  return {
+    total,
+    used,
+    pct: total ? Math.round((used / total) * 100) : 0,
+  }
+})
+
+const dashboardTotals = computed(() => {
+  let revenue = 0
+  let units = 0
+  let ratingSum = 0
+  for (const r of dashboardRows.value) {
+    revenue += r.revenue_usd
+    units += r.units_sold
+    ratingSum += r.customer_rating
+  }
+  const orders = dashboardRows.value.length
+  return {
+    revenue,
+    units,
+    orders,
+    avgRating: orders ? ratingSum / orders : 0,
+    avgOrderValue: orders ? revenue / orders : 0,
+  }
+})
+
+const dashboardYearlyRevenue = computed(() => {
+  const map: Record<string, { rev: number; orders: number }> = {}
+  for (const r of dashboardRows.value) {
+    const yr = r.order_date.slice(0, 4)
+    if (!map[yr]) map[yr] = { rev: 0, orders: 0 }
+    map[yr]!.rev += r.revenue_usd
+    map[yr]!.orders += 1
+  }
+  return Object.entries(map)
+    .map(([yr, { rev, orders }]) => ({ yr, rev, orders }))
+    .sort((a, b) => a.yr.localeCompare(b.yr))
+})
+
+const dashboardYearRange = computed(() => {
+  if (!dashboardYearlyRevenue.value.length) return { min: 0, span: 1 }
+  const values = dashboardYearlyRevenue.value.map((y) => y.rev)
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  return { min, span: Math.max(1, max - min) }
+})
+
+function yearBarHeight(value: number) {
+  const { min, span } = dashboardYearRange.value
+  return 22 + Math.round(((value - min) / span) * 78)
+}
+
+const dashboardBrandShare = computed(() => {
+  const map: Record<string, number> = {}
+  for (const r of dashboardRows.value) map[r.brand] = (map[r.brand] ?? 0) + r.revenue_usd
+  const total = Object.values(map).reduce((a, b) => a + b, 0)
+  return Object.entries(map)
+    .map(([brand, rev]) => ({ brand, rev, pct: total ? Math.round((rev / total) * 100) : 0 }))
+    .sort((a, b) => b.rev - a.rev)
+    .slice(0, 6)
+})
+
+const dashboardTopMarkets = computed(() => {
+  const map: Record<string, number> = {}
+  for (const r of dashboardRows.value) map[r.country] = (map[r.country] ?? 0) + r.revenue_usd
+  const total = Object.values(map).reduce((a, b) => a + b, 0)
+  return Object.entries(map)
+    .map(([country, rev]) => ({ country, rev, pct: total ? Math.round((rev / total) * 100) : 0 }))
+    .sort((a, b) => b.rev - a.rev)
+    .slice(0, 6)
+})
+
+const dashboardChannelSplit = computed(() => {
+  let online = 0
+  let retail = 0
+  for (const r of dashboardRows.value) {
+    if (r.sales_channel === 'Online') online += r.revenue_usd
+    else retail += r.revenue_usd
+  }
+  const total = online + retail
+  return {
+    online,
+    retail,
+    onlinePct: total ? Math.round((online / total) * 100) : 0,
+    retailPct: total ? Math.round((retail / total) * 100) : 0,
+  }
+})
+
+const visibleTotals = computed(() =>
+  activeTab.value === 'marketplace'
+    ? {
+        revenue: dashboardTotals.value.revenue,
+        units: dashboardTotals.value.units,
+        orders: dashboardTotals.value.orders,
+        avgRating: dashboardTotals.value.avgRating,
+      }
+    : totals.value
+)
 
 const shoes = computed<ShoeAggRow[]>(() => {
   const agg = aggregateShoes(filteredOrders.value)
@@ -242,21 +466,25 @@ function resetPaging() {
       <div class="hero__grid"></div>
       <div class="hero__content">
         <h1 class="title">Market <span class="accent">Data</span></h1>
-        <p class="sub">Global footwear sales analytics (2018–2026) — 30,000 real orders. Research trends, not a store.</p>
+        <p class="sub">Two data sources: a 30,000-order footwear dataset (2018–2026) and live SoleTrack listings. The dashboard uses a representative subset after filtering to keep decisions clear.</p>
       </div>
     </div>
 
     <div class="explainer">
-      <span class="explainer-icon">📊</span>
-      <span>This is <strong>market research data</strong> — real sales trends from 30K global orders. It is <strong>not a store</strong>. To buy shoes, go to <router-link to="/browse" class="explainer-link">Browse</router-link>.</span>
+      <span>This is <strong>market research data</strong> from a filtered subset of the larger dataset. It is <strong>not a store</strong>. To buy shoes, go to <router-link to="/browse" class="explainer-link">Browse</router-link>.</span>
+    </div>
+
+    <div class="data-mode" :class="isLiveMarketplaceData ? 'live' : 'demo'">
+      <strong>SoleTrack listing source:</strong>
+      <span>{{ marketplaceDataModeLabel }}</span>
     </div>
 
     <div class="panel">
       <div class="toolbar">
         <div class="tabs">
-          <button class="tab" :class="{ active: activeTab === 'marketplace' }" @click="activeTab='marketplace'">Marketplace Trends</button>
-          <button class="tab" :class="{ active: activeTab === 'shoes' }" @click="activeTab='shoes'; resetPaging(); setSort('total_revenue_usd')">Global Shoes</button>
-          <button class="tab" :class="{ active: activeTab === 'orders' }" @click="activeTab='orders'; resetPaging(); setSort('revenue_usd')">Orders (Raw)</button>
+          <button class="tab" :class="{ active: activeTab === 'marketplace' }" @click="activeTab='marketplace'">Market Overview</button>
+          <button class="tab" :class="{ active: activeTab === 'shoes' }" @click="activeTab='shoes'; resetPaging(); setSort('total_revenue_usd')">Shoe Catalog</button>
+          <button class="tab" :class="{ active: activeTab === 'orders' }" @click="activeTab='orders'; resetPaging(); setSort('revenue_usd')">Order Data</button>
         </div>
 
         <div class="filters">
@@ -284,89 +512,226 @@ function resetPaging() {
       <div class="stats">
         <div class="stat">
           <div class="stat__label">Orders</div>
-          <div class="stat__value">{{ fmtNum(totals.orders) }}</div>
+          <div class="stat__value">{{ fmtNum(visibleTotals.orders) }}</div>
         </div>
         <div class="stat">
           <div class="stat__label">Units</div>
-          <div class="stat__value">{{ fmtNum(totals.units) }}</div>
+          <div class="stat__value">{{ fmtNum(visibleTotals.units) }}</div>
         </div>
         <div class="stat">
           <div class="stat__label">Revenue</div>
-          <div class="stat__value">{{ fmtUSD(totals.revenue) }}</div>
+          <div class="stat__value">{{ fmtUSD(visibleTotals.revenue) }}</div>
         </div>
         <div class="stat">
           <div class="stat__label">Avg Rating</div>
-          <div class="stat__value">{{ totals.avgRating.toFixed(2) }}</div>
+          <div class="stat__value">{{ visibleTotals.avgRating.toFixed(2) }}</div>
         </div>
       </div>
 
-      <!-- ── Marketplace Trends Tab ── -->
-      <div v-if="activeTab === 'marketplace'" class="marketplace-section">
+      <div class="module-guide">
+        <div class="module-guide__title">Analytics Modules</div>
+        <div class="module-guide__grid">
+          <article class="module-card" :class="{ active: activeTab === 'marketplace' }">
+            <h3>Market Overview</h3>
+            <p>Condensed executive view of trends using a representative sample from filtered orders.</p>
+            <p class="module-meta">Used for: fast business decisions and stakeholder updates.</p>
+            <p class="module-meta">Source: global dataset subset + SoleTrack listings.</p>
+          </article>
+          <article class="module-card" :class="{ active: activeTab === 'shoes' }">
+            <h3>Shoe Catalog</h3>
+            <p>Aggregated product-level view with pricing movement simulation and demand signals.</p>
+            <p class="module-meta">Used for: spotting high-performing models and pricing ranges.</p>
+            <p class="module-meta">Source: filtered global dataset (aggregated by shoe key).</p>
+          </article>
+          <article class="module-card" :class="{ active: activeTab === 'orders' }">
+            <h3>Order Data</h3>
+            <p>Row-level transactional records with search, filters, sorting, and paging controls.</p>
+            <p class="module-meta">Used for: detailed validation and operational investigation.</p>
+            <p class="module-meta">Source: filtered global dataset (raw order rows).</p>
+          </article>
+        </div>
+      </div>
 
-        <div class="mkt-grid">
-          <!-- Avg Price by Brand -->
-          <div class="mkt-card">
-            <h2 class="mkt-title">Avg Price by Brand</h2>
-            <p class="mkt-sub">{{ marketplaceProducts.length }} approved listing{{ marketplaceProducts.length !== 1 ? 's' : '' }}</p>
-            <div v-if="avgPriceByBrand.length" class="bar-chart">
-              <div v-for="b in avgPriceByBrand" :key="b.brand" class="bar-row">
-                <span class="bar-label">{{ b.brand }}</span>
-                <div class="bar-track">
-                  <div
-                    class="bar-fill"
-                    :style="{ width: `${Math.round((b.avg / maxBrandAvg) * 100)}%` }"
-                  ></div>
-                </div>
-                <span class="bar-value">${{ b.avg }}</span>
-                <span class="bar-count muted">({{ b.count }})</span>
-              </div>
-            </div>
-            <p v-else class="muted">No listings yet.</p>
+      <!-- ── Market Data Dashboard Tab ── -->
+      <div v-if="activeTab === 'marketplace'" class="dash">
+
+        <div v-if="loading" class="status">Loading market data…</div>
+        <div v-else-if="error" class="status error">{{ error }}</div>
+
+        <template v-else>
+
+          <div class="dash-section-label">Executive Snapshot</div>
+          <div class="subset-note">
+            Using <strong>{{ fmtNum(dashboardSampleMeta.used) }}</strong> sampled orders from
+            <strong>{{ fmtNum(dashboardSampleMeta.total) }}</strong> filtered rows ({{ dashboardSampleMeta.pct }}% sample)
+            to keep comparisons readable.
           </div>
 
-          <!-- Monthly Listing Trend -->
-          <div class="mkt-card">
-            <h2 class="mkt-title">Monthly Listings Trend</h2>
-            <p class="mkt-sub">New approved listings per month</p>
-            <div v-if="monthlyListings.length" class="bar-chart">
-              <div v-for="m in monthlyListings" :key="m.month" class="bar-row">
-                <span class="bar-label">{{ m.month }}</span>
-                <div class="bar-track">
-                  <div
-                    class="bar-fill green"
-                    :style="{ width: `${Math.round((m.count / maxMonthCount) * 100)}%` }"
-                  ></div>
+          <div class="kpi-row kpi-row--executive">
+            <div class="kpi">
+              <div class="kpi__label">Sample Orders</div>
+              <div class="kpi__val">{{ fmtNum(dashboardTotals.orders) }}</div>
+              <div class="kpi__sub">representative subset</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi__label">Sample Revenue</div>
+              <div class="kpi__val">{{ fmtUSD(dashboardTotals.revenue) }}</div>
+              <div class="kpi__sub">from filtered scope</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi__label">Avg Order Value</div>
+              <div class="kpi__val">{{ fmtUSD(dashboardTotals.avgOrderValue) }}</div>
+              <div class="kpi__sub">subset basis</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi__label">Online Share</div>
+              <div class="kpi__val">{{ dashboardChannelSplit.onlinePct }}%</div>
+              <div class="kpi__sub">{{ fmtUSD(dashboardChannelSplit.online) }}</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi__label">Avg Rating</div>
+              <div class="kpi__val accent-val">{{ dashboardTotals.avgRating.toFixed(2) }} ★</div>
+              <div class="kpi__sub">customer score</div>
+            </div>
+          </div>
+
+          <div class="dash-two-col" style="margin-top:16px">
+            <div class="mkt-card">
+              <h2 class="mkt-title">Revenue Trend by Year</h2>
+              <p class="mkt-sub">Trend from the sampled order subset</p>
+              <div v-if="dashboardYearlyRevenue.length" class="yoy-chart">
+                <div v-for="y in dashboardYearlyRevenue" :key="y.yr" class="yoy-col">
+                  <div class="yoy-bar-wrap">
+                    <div class="yoy-bar" :style="{ height: `${yearBarHeight(y.rev)}%` }"></div>
+                  </div>
+                  <div class="yoy-val">{{ (y.rev / 1_000_000).toFixed(1) }}M</div>
+                  <div class="yoy-label">{{ y.yr }}</div>
                 </div>
-                <span class="bar-value">{{ m.count }}</span>
-                <span class="bar-count muted">avg ${{ m.avgPrice }}</span>
+              </div>
+              <p v-else class="muted small">No trend data for current filters.</p>
+            </div>
+
+            <div class="mkt-card">
+              <h2 class="mkt-title">Sales Channel Mix</h2>
+              <p class="mkt-sub">Revenue split in the sampled subset</p>
+              <div class="channel-pills">
+                <div class="channel-pill online">
+                  <span class="ch-label">Online</span>
+                  <span class="ch-pct">{{ dashboardChannelSplit.onlinePct }}%</span>
+                  <span class="ch-rev muted">{{ fmtUSD(dashboardChannelSplit.online) }}</span>
+                </div>
+                <div class="channel-pill retail">
+                  <span class="ch-label">Retail</span>
+                  <span class="ch-pct">{{ dashboardChannelSplit.retailPct }}%</span>
+                  <span class="ch-rev muted">{{ fmtUSD(dashboardChannelSplit.retail) }}</span>
+                </div>
               </div>
             </div>
-            <p v-else class="muted">No monthly data yet.</p>
           </div>
-        </div>
 
-        <!-- AnalyticsData table (satisfies required data table) -->
-        <div class="mkt-table-wrap">
-          <h2 class="mkt-title">Analytics Data Table</h2>
-          <p class="mkt-sub">Monthly summary — averagePrice + totalListings per month</p>
-          <table class="table" v-if="analyticsData.length">
-            <thead>
-              <tr>
-                <th>Month</th>
-                <th>Avg Price ($)</th>
-                <th>Total Listings</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in analyticsData" :key="row.month">
-                <td>{{ row.month }}</td>
-                <td>${{ row.averagePrice }}</td>
-                <td>{{ row.totalListings }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <p v-else class="muted">No analytics data yet.</p>
-        </div>
+          <div class="dash-two-col" style="margin-top:16px">
+            <div class="mkt-card">
+              <h2 class="mkt-title">Top Brands</h2>
+              <p class="mkt-sub">Share of sampled revenue (top 6)</p>
+              <div v-if="dashboardBrandShare.length" class="bar-chart">
+                <div v-for="b in dashboardBrandShare" :key="b.brand" class="bar-row-v2">
+                  <div class="brv2-header">
+                    <span class="brv2-name">{{ b.brand }}</span>
+                    <span class="brv2-pct">{{ b.pct }}%</span>
+                    <span class="brv2-rev muted">{{ fmtUSD(b.rev) }}</span>
+                  </div>
+                  <div class="bar-track">
+                    <div class="bar-fill" :style="{ width: `${Math.max(8, b.pct)}%` }"></div>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="muted small">No brand data for current filters.</p>
+            </div>
+
+            <div class="mkt-card">
+              <h2 class="mkt-title">Top Markets</h2>
+              <p class="mkt-sub">Share of sampled revenue (top 6 countries)</p>
+              <div v-if="dashboardTopMarkets.length" class="bar-chart">
+                <div v-for="c in dashboardTopMarkets" :key="c.country" class="bar-row-v2">
+                  <div class="brv2-header">
+                    <span class="brv2-name">{{ c.country }}</span>
+                    <span class="brv2-pct">{{ c.pct }}%</span>
+                    <span class="brv2-rev muted">{{ fmtUSD(c.rev) }}</span>
+                  </div>
+                  <div class="bar-track">
+                    <div class="bar-fill country-fill" :style="{ width: `${Math.max(8, c.pct)}%` }"></div>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="muted small">No market data for current filters.</p>
+            </div>
+          </div>
+
+          <div class="dash-section-label" style="margin-top:24px">SoleTrack Listings</div>
+          <div class="dash-two-col">
+            <div class="mkt-card">
+              <h2 class="mkt-title">Listings by Brand</h2>
+              <p class="mkt-sub">{{ marketplaceProducts.length }} approved listing{{ marketplaceProducts.length !== 1 ? 's' : '' }} on SoleTrack</p>
+              <div v-if="listingShareByBrand.length" class="bar-chart">
+                <div v-for="b in listingShareByBrand" :key="b.brand" class="bar-row-v2">
+                  <div class="brv2-header">
+                    <span class="brv2-name">{{ b.brand }}</span>
+                    <span class="brv2-pct">{{ b.pct }}%</span>
+                    <span class="brv2-rev muted">{{ b.count }} listing{{ b.count !== 1 ? 's' : '' }} • avg {{ fmtUSD(b.avgPrice) }}</span>
+                  </div>
+                  <div class="bar-track">
+                    <div class="bar-fill cat-fill" :style="{ width: `${Math.max(8, b.pct)}%` }"></div>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="muted small">No listings yet.</p>
+            </div>
+
+            <div class="mkt-card">
+              <h2 class="mkt-title">Recent Listing Activity</h2>
+              <p class="mkt-sub">Last 6 months of approved listings</p>
+              <div v-if="listingTrend.length" class="bar-chart">
+                <div v-for="m in listingTrend" :key="m.month" class="bar-row-v2">
+                  <div class="brv2-header">
+                    <span class="brv2-name">{{ m.month }}</span>
+                    <span class="brv2-pct">{{ m.count }} listed</span>
+                    <span class="brv2-rev muted">avg {{ fmtUSD(m.avgPrice) }}</span>
+                  </div>
+                  <div class="bar-track">
+                    <div class="bar-fill country-fill" :style="{ width: `${Math.round((m.count / listingTrendMaxCount) * 100)}%` }"></div>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="muted small">No monthly data yet.</p>
+            </div>
+          </div>
+
+          <!-- AnalyticsData table -->
+          <div class="mkt-card" style="margin-top:16px">
+            <h2 class="mkt-title">Analytics Data Table</h2>
+            <p class="mkt-sub">Recent monthly summary — avg listing price + total listings (last 6 months)</p>
+            <div class="table-wrap" v-if="analyticsData.length">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>Avg Price</th>
+                    <th>Total Listings</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in analyticsData" :key="row.month">
+                    <td class="mono">{{ row.month }}</td>
+                    <td>{{ fmtUSD(row.averagePrice) }}</td>
+                    <td>{{ row.totalListings }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p v-else class="muted small">No analytics data yet.</p>
+          </div>
+
+        </template>
       </div>
 
       <div class="status" v-else-if="loading">Loading dataset…</div>
@@ -477,6 +842,21 @@ function resetPaging() {
 .explainer-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
 .explainer-link { color: var(--accent); text-decoration: none; font-weight: 700; }
 .explainer-link:hover { text-decoration: underline; }
+.data-mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(126, 207, 255, 0.2);
+  background: rgba(126, 207, 255, 0.08);
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.data-mode strong { color: var(--text); }
+.data-mode.live { border-color: rgba(156,255,0,0.22); background: rgba(156,255,0,0.08); }
+.data-mode.demo { border-color: rgba(245,166,35,0.22); background: rgba(245,166,35,0.08); }
 .hero {
   position: relative;
   border-radius: 18px;
@@ -513,6 +893,49 @@ function resetPaging() {
 .stat { background: linear-gradient(160deg, rgba(156, 255, 0, 0.05) 0%, var(--card) 60%); border: 1px solid rgba(156, 255, 0, 0.15); border-top: 2px solid var(--accent); border-radius: 12px; padding: 14px 16px; }
 .stat__label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
 .stat__value { font-size: 1.3rem; font-weight: 900; color: var(--text); margin-top: 4px; }
+.module-guide {
+  margin: 6px 0 18px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255,255,255,0.015);
+}
+.module-guide__title {
+  color: var(--text);
+  font-weight: 800;
+  font-size: 0.86rem;
+  margin-bottom: 10px;
+}
+.module-guide__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.module-card {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 11px;
+  background: rgba(255,255,255,0.02);
+}
+.module-card.active {
+  border-color: rgba(156,255,0,0.26);
+  box-shadow: inset 0 0 0 1px rgba(156,255,0,0.14);
+}
+.module-card h3 {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 0.86rem;
+}
+.module-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+.module-card .module-meta {
+  margin-top: 6px;
+  font-size: 0.75rem;
+}
 .status { padding: 14px 4px; color: var(--muted); }
 .status.error { color: var(--danger); }
 .pager { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 10px 0 12px; flex-wrap: wrap; }
@@ -541,6 +964,7 @@ function resetPaging() {
   .search { min-width: 0; width: 100%; }
   .toolbar { flex-direction: column; align-items: stretch; }
   .tabs { width: 100%; }
+  .module-guide__grid { grid-template-columns: 1fr; }
   .pager { flex-direction: column; align-items: flex-start; gap: 8px; }
   .pager__right { flex-wrap: wrap; }
 }
@@ -573,19 +997,71 @@ function resetPaging() {
 .shoe-kpis { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; color: var(--muted); font-size: 0.8rem; }
 .shoe-kpis strong { color: var(--text); }
 
-/* ── Marketplace Trends ── */
-.marketplace-section { padding: 8px 0; }
-.mkt-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 20px;
+/* ── Market Dashboard ── */
+.dash { padding: 4px 0; }
+
+.dash-section-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
+
+.subset-note {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(126, 207, 255, 0.26);
+  background: rgba(126, 207, 255, 0.08);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.subset-note strong { color: var(--text); }
+
+/* KPI row */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 6px;
+}
+@media (max-width: 900px) { .kpi-row { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 520px)  { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+.kpi-row--executive { grid-template-columns: repeat(5, 1fr); }
+@media (max-width: 900px) { .kpi-row--executive { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 520px)  { .kpi-row--executive { grid-template-columns: repeat(2, 1fr); } }
+
+.kpi {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(156,255,0,0.12);
+  border-radius: 8px;
+  padding: 14px;
+}
+.kpi__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.kpi__val {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.2;
+  margin-bottom: 3px;
+}
+.kpi__val.accent-val { color: var(--accent); }
+.kpi__sub { font-size: 0.72rem; color: var(--muted); }
+
+/* Year-over-year bar chart */
 .mkt-card {
   background: rgba(255,255,255,0.02);
   border: 1px solid rgba(156,255,0,0.12);
-  border-radius: 14px;
-  padding: 18px;
+  border-radius: 8px;
+  padding: 16px;
 }
 .mkt-title {
   margin: 0 0 4px;
@@ -598,35 +1074,115 @@ function resetPaging() {
   font-size: 0.78rem;
   color: var(--muted);
 }
-.bar-chart { display: flex; flex-direction: column; gap: 10px; }
-.bar-row {
-  display: grid;
-  grid-template-columns: 100px 1fr 60px 60px;
+
+.yoy-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 120px;
+  padding-top: 10px;
+}
+.yoy-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  height: 100%;
+}
+.yoy-bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+.yoy-bar {
+  width: 100%;
+  background: var(--accent);
+  border-radius: 3px 3px 0 0;
+  min-height: 3px;
+  transition: height 0.3s ease;
+  opacity: 0.85;
+}
+.yoy-val { font-size: 0.65rem; font-weight: 700; color: var(--text); margin-top: 4px; }
+.yoy-label { font-size: 0.62rem; color: var(--muted); margin-top: 2px; }
+
+/* Two-column layout */
+.dash-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 720px) { .dash-two-col { grid-template-columns: 1fr; } }
+
+/* Bar rows v2 */
+.bar-chart { display: flex; flex-direction: column; gap: 12px; }
+.bar-row-v2 { display: flex; flex-direction: column; gap: 5px; }
+.brv2-header {
+  display: flex;
+  align-items: baseline;
   gap: 8px;
   font-size: 0.82rem;
 }
-.bar-label {
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+.brv2-name { color: var(--text); font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brv2-pct { color: var(--accent); font-weight: 900; font-size: 0.85rem; flex-shrink: 0; }
+.brv2-rev { font-size: 0.75rem; flex-shrink: 0; }
+
 .bar-track {
   background: rgba(156,255,0,0.07);
   border-radius: 4px;
-  height: 10px;
+  height: 8px;
   overflow: hidden;
 }
 .bar-fill {
   height: 100%;
   background: var(--accent);
   border-radius: 4px;
-  transition: width 0.4s ease;
+  transition: width 0.5s ease;
 }
-.bar-fill.green { background: var(--success); }
-.bar-value { color: var(--text); font-weight: 700; text-align: right; }
-.bar-count { font-size: 0.75rem; text-align: right; }
+.bar-fill.cat-fill { background: #7ecfff; }
+.bar-fill.country-fill { background: #f5a623; }
+
+/* Income / buyer segments */
+.income-cards { display: flex; flex-direction: column; gap: 10px; }
+.income-seg {
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.02);
+}
+.income-seg.high { border-color: rgba(156,255,0,0.2); }
+.income-seg.medium { border-color: rgba(100,180,255,0.18); }
+.income-seg.low { border-color: rgba(255,180,0,0.15); }
+.income-lvl { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 2px; }
+.income-rev { font-size: 1rem; font-weight: 900; color: var(--text); }
+.income-pct { font-size: 0.72rem; color: var(--muted); margin-bottom: 6px; }
+.income-bar-track { background: rgba(255,255,255,0.06); border-radius: 3px; height: 4px; overflow: hidden; }
+.income-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.5s ease; }
+.income-seg.medium .income-bar-fill { background: #7ecfff; }
+.income-seg.low .income-bar-fill { background: #f5a623; }
+
+/* Channel split */
+.channel-pills { display: flex; gap: 10px; flex-wrap: wrap; }
+.channel-pill {
+  flex: 1;
+  min-width: 100px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.channel-pill.online { border-color: rgba(156,255,0,0.2); }
+.channel-pill.retail { border-color: rgba(100,180,255,0.18); }
+.ch-label { font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.ch-pct { font-size: 1.2rem; font-weight: 900; color: var(--text); }
+.channel-pill.online .ch-pct { color: var(--accent); }
+.channel-pill.retail .ch-pct { color: #7ecfff; }
+.ch-rev { font-size: 0.75rem; }
+
+.mkt-table-wrap { margin-top: 16px; }
+.small { font-size: 0.82rem; }
 .mkt-table-wrap {
   background: rgba(255,255,255,0.02);
   border: 1px solid rgba(156,255,0,0.12);

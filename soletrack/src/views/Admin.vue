@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import {
   addDoc,
   collection,
+  deleteDoc,
   onSnapshot,
   orderBy,
   query,
@@ -17,6 +18,7 @@ import { useRole } from '@/lib/role'
 import { db, demoMode, firebaseConfigured } from '@/lib/firebase'
 import {
   approveDemoProduct,
+  deleteDemoProduct,
   getDemoPendingProducts,
   getOrSeedDemoProducts,
   rejectDemoProduct,
@@ -47,6 +49,7 @@ const allProducts = ref<ProductDoc[]>([])
 
 const rejectId = ref<string | null>(null)
 const rejectNote = ref('')
+const removeConfirmId = ref<string | null>(null)
 
 let stopListener: (() => void) | null = null
 
@@ -178,6 +181,32 @@ async function confirmReject() {
   }
 }
 
+async function confirmRemove() {
+  const id = removeConfirmId.value
+  if (!id) return
+  if (demoMode) {
+    deleteDemoProduct(id)
+    allProducts.value = getOrSeedDemoProducts() as any
+    pending.value = getDemoPendingProducts() as any
+    removeConfirmId.value = null
+    return
+  }
+  if (!db || !user.value) return
+  try {
+    await deleteDoc(doc(db, 'products', id))
+    await addDoc(collection(db, 'adminActions'), {
+      adminId: user.value.uid,
+      itemId: id,
+      action: 'remove',
+      note: null,
+      createdAt: serverTimestamp(),
+    })
+    removeConfirmId.value = null
+  } catch {
+    error.value = 'Could not remove listing.'
+  }
+}
+
 const counts = computed(() => {
   const c = { pending: 0, approved: 0, rejected: 0, sold: 0 }
   for (const p of allProducts.value) {
@@ -287,6 +316,35 @@ const avgByBrand = computed(() => {
             </tr>
           </tbody>
         </table>
+      </section>
+
+      <!-- All listings: approved + others — with Remove action -->
+      <section class="section" v-if="allProducts.length">
+        <h2 class="section-title">All Listings</h2>
+        <div class="queue">
+          <div class="listing-row" v-for="p in allProducts" :key="p.id">
+            <img
+              class="listing-img"
+              :src="p.image || '/images/shoes/pexels-jonathanborba-12031204.jpg'"
+              :alt="p.name"
+            />
+            <div class="listing-info">
+              <div class="listing-name">{{ p.name }}</div>
+              <div class="listing-meta">
+                {{ p.brand || '—' }} · Size {{ p.size || '—' }} · ${{ p.price }} · {{ p.condition || '—' }}
+              </div>
+              <div class="listing-vendor">by {{ p.vendorName || 'Unknown vendor' }}</div>
+            </div>
+            <div class="listing-actions">
+              <span class="status-badge" :class="p.status">{{ p.status }}</span>
+              <template v-if="removeConfirmId === p.id">
+                <button class="btn reject" @click="confirmRemove">Confirm remove</button>
+                <button class="btn" @click="removeConfirmId = null">Cancel</button>
+              </template>
+              <button v-else class="btn remove" @click="removeConfirmId = p.id">Remove</button>
+            </div>
+          </div>
+        </div>
       </section>
     </template>
 
@@ -410,6 +468,24 @@ const avgByBrand = computed(() => {
   background: rgba(255, 50, 50, 0.06);
 }
 .btn.reject:hover { background: rgba(255, 50, 50, 0.12); }
+.btn.remove {
+  border-color: rgba(255, 50, 50, 0.25);
+  color: var(--danger);
+}
+.btn.remove:hover { background: rgba(255, 50, 50, 0.06); }
+
+.status-badge {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--muted);
+}
+.status-badge.approved { border-color: rgba(80,200,120,0.3); color: var(--success); }
+.status-badge.pending  { border-color: rgba(255,180,0,0.3);  color: #f5a623; }
+.status-badge.rejected { border-color: rgba(255,50,50,0.3);  color: var(--danger); }
+.status-badge.sold     { border-color: rgba(255,255,255,0.1); color: var(--muted); }
 
 /* Stats table */
 .stats-table {

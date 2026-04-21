@@ -34,6 +34,8 @@ body {
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+  /* make room for the demo bar when in demo mode */
+  padding-bottom: 52px;
 }
 
 /* Layout helpers */

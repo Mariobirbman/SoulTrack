@@ -4,13 +4,12 @@ import { useRoute } from 'vue-router'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db, firebaseConfigured } from '@/lib/firebase'
 import { useCart } from '@/lib/cart'
-import { demoProducts } from '@/lib/demoMarketplace'
 import type { DemoProduct } from '@/lib/demoMarketplace'
 import { getOrSeedDemoProducts } from '@/lib/demoStore'
 
 type Product = DemoProduct
 
-const products = ref<Product[]>(demoProducts)
+const products = ref<Product[]>([])
 
 const loading = ref(false)
 const loadError = ref('')
@@ -19,32 +18,25 @@ let stopProductsListener: (() => void) | null = null
 onMounted(() => {
   loading.value = true
   if (!firebaseConfigured || !db) {
-    // Show fixed demo marketplace + any user-approved demo-store listings
-    const approvedFromStore = getOrSeedDemoProducts().filter((p) => (p as any).status === 'approved')
-    const demoIds = new Set(demoProducts.map((d) => d.id))
-    const storeOnly = approvedFromStore.filter((p) => !demoIds.has(p.id))
-    products.value = [...(storeOnly as any), ...demoProducts]
+    // Demo mode: only show products that were approved through the real approval flow
+    products.value = getOrSeedDemoProducts().filter((p) => p.status === 'approved') as any
     loadError.value = ''
     loading.value = false
     return
   }
-  // Only show admin-approved listings in the public feed
+  // Firebase mode: only show admin-approved listings
   const q = query(collection(db, 'products'), where('status', '==', 'approved'))
   stopProductsListener = onSnapshot(
     q,
     (snap) => {
-      const approved = snap.docs
+      products.value = snap.docs
         .map((d) => ({ id: d.id, ...(d.data() as Omit<Product, 'id'>) }))
         .filter((p) => typeof (p as any).vendorUid === 'string' && (p as any).vendorUid.length > 0)
-      // Always show fixed demos; prepend any real approved listings on top
-      const demoIds = new Set(demoProducts.map((d) => d.id))
-      const realOnly = approved.filter((p) => !demoIds.has(p.id))
-      products.value = [...realOnly, ...demoProducts]
       loadError.value = ''
       loading.value = false
     },
     () => {
-      loadError.value = 'Could not load products from the database (showing demo data).'
+      loadError.value = 'Could not load products from the database.'
       loading.value = false
     },
   )
@@ -195,7 +187,7 @@ function addProductToCart(p: Product) {
             @click="toggleWatchlist(p.id)"
             :title="isWatched(p.id) ? 'Remove from watchlist' : 'Add to watchlist'"
           >
-            {{ isWatched(p.id) ? '★' : '☆' }}
+            {{ isWatched(p.id) ? 'Saved' : 'Save' }}
           </button>
           <span
             class="condition-badge"
@@ -257,14 +249,13 @@ function addProductToCart(p: Product) {
 
     <!-- Empty state -->
     <div class="empty-state" v-else>
-      <p class="empty-icon">🔍</p>
       <p>No products match your filters.</p>
       <button class="btn" @click="searchQuery = ''; selectedBrand = 'All'; selectedCondition = 'All'; selectedPlatform = 'All'">Clear filters</button>
     </div>
 
     <!-- Watchlist bar -->
     <div class="watchlist-bar" v-if="watchlist.length">
-      <span>★ {{ watchlist.length }} item{{ watchlist.length !== 1 ? 's' : '' }} in watchlist</span>
+      <span>{{ watchlist.length }} item{{ watchlist.length !== 1 ? 's' : '' }} saved</span>
       <button class="btn-clear" @click="watchlist = []">Clear</button>
     </div>
 
@@ -321,16 +312,15 @@ function addProductToCart(p: Product) {
 }
 
 .product-card {
-  background: linear-gradient(160deg, rgba(156, 255, 0, 0.04) 0%, var(--card) 60%);
-  border: 1px solid rgba(156, 255, 0, 0.15);
-  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid rgba(156, 255, 0, 0.12);
+  border-radius: 10px;
   overflow: hidden;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.15s;
 }
 
 .product-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 32px rgba(156, 255, 0, 0.1);
+  border-color: rgba(156, 255, 0, 0.28);
 }
 
 .product-img-wrap {
@@ -344,30 +334,24 @@ function addProductToCart(p: Product) {
   height: 100%;
   object-fit: cover;
   display: block;
-  transition: transform 0.3s ease;
 }
-
-.product-card:hover .product-img { transform: scale(1.04); }
 
 .watchlist-btn {
   position: absolute;
-  top: 10px;
-  right: 10px;
-  background: rgba(6, 15, 7, 0.7);
-  border: 1px solid rgba(156, 255, 0, 0.3);
+  top: 8px;
+  right: 8px;
+  background: rgba(6, 15, 7, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   color: var(--muted);
-  border-radius: 50%;
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border-radius: 6px;
+  padding: 3px 7px;
+  font-size: 0.72rem;
+  font-weight: 700;
   cursor: pointer;
-  font-size: 1.1rem;
-  transition: color 0.2s, background 0.2s;
+  transition: color 0.15s, border-color 0.15s;
 }
 
-.watchlist-btn.watched { color: var(--accent); background: rgba(156, 255, 0, 0.15); }
+.watchlist-btn.watched { color: var(--accent); border-color: rgba(156, 255, 0, 0.3); }
 
 .condition-badge {
   position: absolute;
@@ -405,7 +389,7 @@ function addProductToCart(p: Product) {
   margin-bottom: 4px;
 }
 
-.product-brand { margin: 0; font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.product-brand { margin: 0; font-size: 0.78rem; color: var(--muted); font-weight: 600; }
 
 .product-platform-tag {
   font-size: 0.7rem;

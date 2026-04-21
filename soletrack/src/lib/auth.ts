@@ -3,11 +3,11 @@ import type { User as FirebaseUser } from 'firebase/auth'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from './firebase'
 import { demoMode } from './firebase'
-import { getOrSeedDemoUser } from './demoStore'
+import { getCurrentDemoUser } from './demoStore'
 
 export type AppUser = Pick<FirebaseUser, 'uid' | 'email' | 'displayName'> & { isDemo?: boolean }
 
-const seededDemoUser = demoMode ? getOrSeedDemoUser() : null
+const seededDemoUser = demoMode ? getCurrentDemoUser() : null
 const user = ref<AppUser | null>(
   demoMode
     ? ({ uid: seededDemoUser!.uid, email: seededDemoUser!.email, displayName: seededDemoUser!.displayName, isDemo: true } as AppUser)

@@ -2,7 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { useAuth } from '@/lib/auth'
-import { db, firebaseConfigured } from '@/lib/firebase'
+import { db, demoMode, firebaseConfigured } from '@/lib/firebase'
+import { getDemoVendorOrders } from '@/lib/demoStore'
 
 type VendorOrder = {
   checkoutId: string
@@ -29,6 +30,7 @@ function tsToMs(ts: any) {
   if (!ts) return 0
   if (typeof ts.toMillis === 'function') return ts.toMillis()
   if (typeof ts.seconds === 'number') return ts.seconds * 1000
+  if (typeof ts === 'string') return new Date(ts).getTime()
   return 0
 }
 
@@ -41,13 +43,22 @@ function fmtDate(ts: any) {
 onMounted(() => {
   ;(async () => {
     await ready
-    if (!firebaseConfigured || !db) {
-      loadError.value = 'Firebase is not configured yet.'
+    if (!user.value) {
+      loadError.value = 'Login required.'
       loading.value = false
       return
     }
-    if (!user.value) {
-      loadError.value = 'Login required.'
+
+    // ── Demo mode ────────────────────────────────────────────────────────────
+    if (demoMode) {
+      orders.value = getDemoVendorOrders(user.value.uid) as any
+      loading.value = false
+      return
+    }
+
+    // ── Firebase mode ────────────────────────────────────────────────────────
+    if (!firebaseConfigured || !db) {
+      loadError.value = 'Firebase is not configured yet.'
       loading.value = false
       return
     }
@@ -96,12 +107,12 @@ const total = computed(() => orders.value.reduce((a, o) => a + (Number(o.subtota
       <div class="sum muted">Total order value: <strong class="accent">${{ total.toFixed(2) }}</strong></div>
       <router-link class="order" v-for="o in orders" :key="o.id" :to="`/order/${o.id}`">
         <div class="left">
-          <div class="vendor">{{ o.vendorName || 'Your shop' }}</div>
+          <div class="buyer-name">{{ o.pickupName || 'Buyer' }}</div>
           <div class="muted small">{{ fmtDate(o.createdAt) }}</div>
         </div>
         <div class="right">
-          <div class="muted small">Pickup</div>
-          <div class="pickup">{{ o.pickupPreferredDateTime || '—' }}</div>
+          <span class="status-chip" :class="o.status">{{ o.status || 'placed' }}</span>
+          <div class="muted small pickup-time">{{ o.pickupPreferredDateTime || '—' }}</div>
         </div>
       </router-link>
     </div>
@@ -136,9 +147,24 @@ const total = computed(() => orders.value.reduce((a, o) => a + (Number(o.subtota
   text-decoration: none;
 }
 .order:hover { border-color: rgba(156, 255, 0, 0.22); }
-.vendor { color: var(--text); font-weight: 900; }
-.pickup { color: var(--text); font-weight: 800; }
-.right { text-align: right; }
+.buyer-name { color: var(--text); font-weight: 900; }
+.pickup-time { margin-top: 4px; }
+.right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+
+.status-chip {
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(156, 255, 0, 0.25);
+  color: var(--accent);
+  background: rgba(156, 255, 0, 0.06);
+  white-space: nowrap;
+}
+.status-chip.placed   { border-color: rgba(100,180,255,0.3); color: #7ecfff; background: rgba(100,180,255,0.07); }
+.status-chip.accepted { border-color: rgba(255,180,0,0.3);   color: #f5a623; background: rgba(255,180,0,0.07); }
+.status-chip.ready    { border-color: rgba(156,255,0,0.3);   color: var(--accent); background: rgba(156,255,0,0.07); }
+.status-chip.picked_up { border-color: rgba(80,220,120,0.3); color: var(--success); background: rgba(80,220,120,0.07); }
 
 .btn {
   padding: 10px 14px;

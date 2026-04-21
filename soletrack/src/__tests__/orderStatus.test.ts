@@ -55,8 +55,8 @@ describe('order status progression', () => {
 
   it('statuses are in the correct forward order', () => {
     for (let i = 0; i < STATUS_STEPS.length - 1; i++) {
-      const step = STATUS_STEPS[i]
-      const next = STATUS_STEPS[i + 1]
+      const step = STATUS_STEPS[i]!
+      const next = STATUS_STEPS[i + 1]!
       expect(nextStatus(step)).toBe(next)
     }
   })

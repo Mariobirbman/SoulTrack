@@ -4,7 +4,8 @@ import { useRouter } from 'vue-router'
 import { addDoc, collection, doc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { useAuth } from '@/lib/auth'
 import { useCart } from '@/lib/cart'
-import { auth, db, firebaseConfigured } from '@/lib/firebase'
+import { auth, db, demoMode, firebaseConfigured } from '@/lib/firebase'
+import { addDemoOrder } from '@/lib/demoStore'
 
 type CartLine = {
   id: string
@@ -27,16 +28,22 @@ const notes = ref('')
 
 const error = ref('')
 const saving = ref(false)
+const confirmed = ref(false)
+const confirmedCheckoutId = ref('')
 
 const lines = computed(() => items.value as unknown as CartLine[])
-const invalidLines = computed(() => lines.value.filter((l) => !l.vendorUid || l.vendorUid.startsWith('__')))
+// In demo mode all items are valid; in Firebase mode filter out dataset catalog items
+const invalidLines = computed(() =>
+  demoMode ? [] : lines.value.filter((l) => !l.vendorUid || l.vendorUid.startsWith('__')),
+)
 
 const byVendor = computed(() => {
   const m = new Map<string, { vendorUid: string; vendorName: string; lines: CartLine[] }>()
   for (const l of lines.value) {
-    if (!l.vendorUid || l.vendorUid.startsWith('__')) continue
+    if (!demoMode && (!l.vendorUid || l.vendorUid.startsWith('__'))) continue
+    if (!l.vendorUid) continue
     const key = l.vendorUid
-    const cur = m.get(key) ?? { vendorUid: l.vendorUid, vendorName: l.vendorName ?? 'Vendor', lines: [] }
+    const cur = m.get(key) ?? { vendorUid: l.vendorUid, vendorName: l.vendorName ?? 'Vendor', lines: [] as CartLine[] }
     cur.lines.push(l)
     m.set(key, cur)
   }
@@ -74,10 +81,6 @@ async function validateCartPrices(): Promise<string | null> {
 
 async function placeOrders() {
   error.value = ''
-  if (!firebaseConfigured || !auth || !db) {
-    error.value = 'Firebase is not configured yet.'
-    return
-  }
   if (!user.value) {
     router.push('/login')
     return
@@ -104,6 +107,46 @@ async function placeOrders() {
   }
 
   saving.value = true
+  const checkoutId = newCheckoutId()
+
+  // ── Demo mode: write orders to localStorage ──────────────────────────────
+  if (demoMode) {
+    for (const g of byVendor.value) {
+      addDemoOrder({
+        checkoutId,
+        status: 'placed',
+        buyerUid: user.value.uid,
+        buyerEmail: user.value.email ?? null,
+        vendorUid: g.vendorUid,
+        vendorName: g.vendorName,
+        pickupName: pickupName.value.trim(),
+        pickupEmail: pickupEmail.value.trim(),
+        pickupPreferredDateTime: pickupPreferredDateTime.value.trim(),
+        notes: notes.value.trim(),
+        items: g.lines.map((l) => ({
+          productId: l.id,
+          nameSnapshot: l.name,
+          priceSnapshot: l.price,
+          qty: l.qty,
+          image: l.image ?? null,
+        })),
+        subtotal: g.total,
+      })
+    }
+    clear()
+    confirmedCheckoutId.value = checkoutId
+    confirmed.value = true
+    saving.value = false
+    return
+  }
+
+  // ── Firebase mode ─────────────────────────────────────────────────────────
+  if (!firebaseConfigured || !auth || !db) {
+    error.value = 'Firebase is not configured yet.'
+    saving.value = false
+    return
+  }
+
   const priceError = await validateCartPrices().catch(() => null)
   if (priceError) {
     error.value = priceError
@@ -111,7 +154,6 @@ async function placeOrders() {
     return
   }
 
-  const checkoutId = newCheckoutId()
   try {
     for (const g of byVendor.value) {
       await addDoc(collection(db, 'vendorOrders'), {
@@ -136,7 +178,6 @@ async function placeOrders() {
         createdAt: serverTimestamp(),
       })
     }
-
     clear()
     router.push({ path: '/orders', query: { checkoutId } })
   } catch {
@@ -149,6 +190,23 @@ async function placeOrders() {
 
 <template>
   <div class="checkout-page">
+
+    <!-- ── Order confirmed screen ── -->
+    <div v-if="confirmed" class="confirmed-screen">
+      <div class="confirmed-icon">✓</div>
+      <div class="confirmed-title">Order placed!</div>
+      <p class="confirmed-sub">
+        Your pickup request has been sent to the seller.<br>
+        They'll accept it and let you know when it's ready.
+      </p>
+      <div class="confirmed-id">Checkout ID: <span class="mono">{{ confirmedCheckoutId }}</span></div>
+      <div class="confirmed-actions">
+        <router-link class="btn primary" :to="{ path: '/orders', query: { checkoutId: confirmedCheckoutId } }">View my orders</router-link>
+        <router-link class="btn" to="/browse">Keep shopping</router-link>
+      </div>
+    </div>
+
+    <template v-else>
     <div class="head">
       <div>
         <h1 class="title">Checkout</h1>
@@ -216,6 +274,7 @@ async function placeOrders() {
         </div>
       </section>
     </div>
+    </template>
   </div>
 </template>
 
@@ -273,6 +332,51 @@ async function placeOrders() {
 }
 .btn.primary { background: var(--accent); border-color: transparent; color: #0b1205; width: 100%; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Confirmation screen */
+.confirmed-screen {
+  max-width: 480px;
+  margin: 80px auto;
+  text-align: center;
+  padding: 0 16px;
+}
+.confirmed-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: rgba(156, 255, 0, 0.08);
+  color: var(--accent);
+  font-size: 1.6rem;
+  line-height: 52px;
+  margin: 0 auto 20px;
+}
+.confirmed-title {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+.confirmed-sub {
+  color: var(--muted);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+.confirmed-id {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 24px;
+}
+.mono {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: var(--text);
+}
+.confirmed-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
 
 @media (max-width: 600px) {
   .checkout-page { padding: 20px 12px 60px; }

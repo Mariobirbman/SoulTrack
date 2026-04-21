@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useCart } from '@/lib/cart'
 import { useAuth } from '@/lib/auth'
-import { firebaseConfigured } from '@/lib/firebase'
+import { demoMode, firebaseConfigured } from '@/lib/firebase'
 
 const { items, subtotal, totalCount, remove, setQty, clear } = useCart()
 const { user } = useAuth()
@@ -12,7 +12,9 @@ function fmtUSD(n: number) {
 }
 
 const hasItems = computed(() => items.value.length > 0)
-const checkoutReady = computed(() => firebaseConfigured && hasItems.value)
+// Allow checkout in demo mode even without Firebase
+const canCheckout = computed(() => demoMode || firebaseConfigured)
+const checkoutReady = computed(() => canCheckout.value && hasItems.value)
 </script>
 
 <template>
@@ -28,7 +30,7 @@ const checkoutReady = computed(() => firebaseConfigured && hasItems.value)
     <div v-if="!hasItems" class="empty">
       <p class="empty-icon">🛒</p>
       <p>Your cart is empty.</p>
-      <router-link class="btn primary" to="/analytics">Browse catalog</router-link>
+      <router-link class="btn primary" to="/browse">Browse listings</router-link>
     </div>
 
     <div v-else class="grid">
@@ -61,8 +63,8 @@ const checkoutReady = computed(() => firebaseConfigured && hasItems.value)
           <span class="muted">Subtotal</span>
           <strong>{{ fmtUSD(subtotal) }}</strong>
         </div>
-        <div v-if="!firebaseConfigured" class="sum-note muted">Checkout is disabled until Firebase is configured.</div>
-        <div v-else class="sum-note muted">Demo checkout (pickup-style). No real payments.</div>
+        <div v-if="!canCheckout" class="sum-note muted">Checkout requires Firebase. Add .env.local to enable.</div>
+        <div v-else class="sum-note muted">Pickup-based checkout. No real payments.</div>
 
         <router-link v-if="checkoutReady && user" class="btn primary" to="/checkout">Checkout</router-link>
         <router-link v-else-if="checkoutReady && !user" class="btn primary" to="/login">Login to checkout</router-link>

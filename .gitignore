@@ -30,3 +30,13 @@ Thumbs.db
 soletrack/devserver.log
 soletrack/devserver.err.log
 .gitnexus
+
+# Local AI/agent tooling artifacts (keep out of public repo)
+.agent/
+.claude/
+AGENTS.md
+CLAUDE.md
+.mcp.json
+codedb.snapshot
+assets/Gemini_Generated_*
+soletrack/src/assets/Gemini_Generated_*

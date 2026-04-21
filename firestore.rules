@@ -89,6 +89,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Audit log of admin approve/reject actions.
+    match /adminActions/{actionId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
     // User profiles + per-user sales.
     match /users/{uid} {
       allow read: if isSelf(uid) || isAdmin();

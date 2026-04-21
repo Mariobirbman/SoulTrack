@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { useAuth } from '@/lib/auth'
 import { useRole } from '@/lib/role'
 import FirebaseStatusBanner from '@/components/FirebaseStatusBanner.vue'
+import DemoBar from '@/components/DemoBar.vue'
 import Footer from '@/components/Footer.vue'
 import { useCart } from '@/lib/cart'
 
@@ -39,6 +40,7 @@ watch(() => route.fullPath, () => closeMenu())
 <template>
   <div>
     <FirebaseStatusBanner />
+    <DemoBar />
     <a class="skip-link" href="#main">Skip to content</a>
 
     <nav>
@@ -91,6 +93,7 @@ watch(() => route.fullPath, () => closeMenu())
               <li><router-link to="/account" @click="closeMenu">My Account</router-link></li>
               <li><router-link to="/sell" @click="closeMenu">Sell a Shoe</router-link></li>
               <li><router-link to="/orders" @click="closeMenu">My Orders</router-link></li>
+              <li><router-link to="/vendor-orders" @click="closeMenu">Vendor Orders</router-link></li>
               <li v-if="isAdmin"><router-link to="/admin" @click="closeMenu" class="admin-link">Admin Panel</router-link></li>
             </ul>
           </li>
@@ -100,6 +103,7 @@ watch(() => route.fullPath, () => closeMenu())
             <li class="mobile-account-link"><router-link to="/account" @click="closeMenu">My Account</router-link></li>
             <li class="mobile-account-link"><router-link to="/sell" @click="closeMenu">Sell a Shoe</router-link></li>
             <li class="mobile-account-link"><router-link to="/orders" @click="closeMenu">My Orders</router-link></li>
+            <li class="mobile-account-link"><router-link to="/vendor-orders" @click="closeMenu">Vendor Orders</router-link></li>
             <li v-if="isAdmin" class="mobile-account-link"><router-link to="/admin" @click="closeMenu">Admin Panel</router-link></li>
           </template>
         </ul>
