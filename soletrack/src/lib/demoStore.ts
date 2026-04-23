@@ -11,10 +11,14 @@ export type DemoSale = {
   id: string
   shoe: string
   size: string
-  buyPrice: number
+  buyPrice: number | null
   sellPrice: number
   date: string
   platform: string
+  qty?: number
+  source?: 'manual' | 'order'
+  orderId?: string
+  checkoutId?: string
 }
 
 export type DemoVendorProfile = {
@@ -29,6 +33,10 @@ const USER_KEY = 'soletrack_demo_user_v1'
 const SALES_KEY = 'soletrack_demo_sales_v1'
 const VENDOR_KEY = 'soletrack_demo_vendor_v1'
 const PRODUCTS_KEY = 'soletrack_demo_products_v1'
+const ORDERS_KEY = 'soletrack_demo_orders_v1'
+const MESSAGES_KEY = 'soletrack_demo_messages_v1'
+export const DEMO_SELLER_UID = '__demo__me'
+export const DEMO_BUYER_UID = '__demo__buyer'
 
 function safeJsonParse<T>(raw: string | null): T | null {
   if (!raw) return null
@@ -48,18 +56,61 @@ function safeJsonStringify(v: unknown) {
 }
 
 export const DEMO_BUYER_USER: DemoUser = {
-  uid: '__demo__buyer',
+  uid: DEMO_BUYER_UID,
   displayName: 'Demo Buyer',
   email: 'buyer@soletrack.app',
 }
 
+function migrateDemoSellerUidReferences(fromUid: string, toUid: string) {
+  if (typeof window === 'undefined' || !fromUid || !toUid || fromUid === toUid) return
+
+  const storedProducts = safeJsonParse<Array<Record<string, unknown>>>(
+    window.localStorage.getItem(PRODUCTS_KEY),
+  )
+  if (Array.isArray(storedProducts) && storedProducts.length) {
+    let changed = false
+    const nextProducts = storedProducts.map((p) => {
+      if (p.vendorUid === fromUid) {
+        changed = true
+        return { ...p, vendorUid: toUid }
+      }
+      return p
+    })
+    if (changed) window.localStorage.setItem(PRODUCTS_KEY, safeJsonStringify(nextProducts))
+  }
+
+  const storedOrders = safeJsonParse<Array<Record<string, unknown>>>(window.localStorage.getItem(ORDERS_KEY))
+  if (Array.isArray(storedOrders) && storedOrders.length) {
+    let changed = false
+    const nextOrders = storedOrders.map((o) => {
+      if (o.vendorUid === fromUid) {
+        changed = true
+        return { ...o, vendorUid: toUid }
+      }
+      return o
+    })
+    if (changed) window.localStorage.setItem(ORDERS_KEY, safeJsonStringify(nextOrders))
+  }
+}
+
 export function getOrSeedDemoUser(): DemoUser {
   if (typeof window === 'undefined') {
-    return { uid: '__demo__me', displayName: 'Demo Reseller', email: 'demo@soletrack.app' }
+    return { uid: DEMO_SELLER_UID, displayName: 'Demo Reseller', email: 'demo@soletrack.app' }
   }
   const existing = safeJsonParse<DemoUser>(window.localStorage.getItem(USER_KEY))
-  if (existing?.uid && existing.displayName && existing.email) return existing
-  const seeded: DemoUser = { uid: '__demo__me', displayName: 'Demo Reseller', email: 'demo@soletrack.app' }
+  if (existing?.uid && existing.displayName && existing.email) {
+    const normalized: DemoUser = {
+      uid: DEMO_SELLER_UID,
+      displayName: existing.displayName,
+      email: existing.email,
+    }
+    if (existing.uid !== normalized.uid) {
+      migrateDemoSellerUidReferences(existing.uid, normalized.uid)
+      window.localStorage.setItem(USER_KEY, safeJsonStringify(normalized))
+    }
+    return normalized
+  }
+  const seeded: DemoUser = { uid: DEMO_SELLER_UID, displayName: 'Demo Reseller', email: 'demo@soletrack.app' }
   window.localStorage.setItem(USER_KEY, safeJsonStringify(seeded))
   return seeded
 }
@@ -148,7 +199,7 @@ export function saveDemoVendor(vendor: DemoVendorProfile) {
   window.localStorage.setItem(VENDOR_KEY, safeJsonStringify(vendor))
 }
 
-// Products stored in demo mode include a `status` field for the admin approval flow
+// Products stored in demo mode include a `status` field for listing availability.
 type DemoProductStored = { id: string; status?: string } & Omit<DemoProduct, 'id'>
 
 export function getOrSeedDemoProducts(): DemoProductStored[] {
@@ -158,11 +209,11 @@ export function getOrSeedDemoProducts(): DemoProductStored[] {
 
   const v = getOrSeedDemoVendor()
 
-  // Seed two approved listings (vendor's existing stock) + two pending ones (just submitted)
+  // Seed active listings (immediately visible in Browse).
   const seeded: DemoProductStored[] = [
     {
       id: 'prod-1',
-      vendorUid: '__demo__me',
+      vendorUid: DEMO_SELLER_UID,
       vendorName: v.name,
       name: 'Jordan 4 Retro "Midnight"',
       brand: 'Jordan',
@@ -176,11 +227,11 @@ export function getOrSeedDemoProducts(): DemoProductStored[] {
       sku: 'DJ-004',
       soldCount: 12,
       description: 'Brand new pair. Box included. Same-day meetup.',
-      status: 'approved',
+      status: 'active',
     },
     {
       id: 'prod-2',
-      vendorUid: '__demo__me',
+      vendorUid: DEMO_SELLER_UID,
       vendorName: v.name,
       name: 'Nike Dunk Low "Forest"',
       brand: 'Nike',
@@ -194,12 +245,12 @@ export function getOrSeedDemoProducts(): DemoProductStored[] {
       sku: 'NK-204',
       soldCount: 22,
       description: 'Clean colorway, great flip. Pickup preferred.',
-      status: 'approved',
+      status: 'active',
     },
-    // Pending listings — ready for admin review
+    // Additional active listings for richer demo browsing.
     {
-      id: 'prod-pending-1',
-      vendorUid: '__demo__me',
+      id: 'prod-3',
+      vendorUid: DEMO_SELLER_UID,
       vendorName: v.name,
       name: 'Adidas Yeezy Boost 350 V2 "Bone"',
       brand: 'Adidas',
@@ -212,11 +263,11 @@ export function getOrSeedDemoProducts(): DemoProductStored[] {
       colorway: 'Bone / White',
       sku: 'AD-350',
       description: 'Deadstock, never tried on. Receipt included.',
-      status: 'pending',
+      status: 'active',
     },
     {
-      id: 'prod-pending-2',
-      vendorUid: '__demo__me',
+      id: 'prod-4',
+      vendorUid: DEMO_SELLER_UID,
       vendorName: v.name,
       name: 'New Balance 992 Grey',
       brand: 'New Balance',
@@ -229,7 +280,7 @@ export function getOrSeedDemoProducts(): DemoProductStored[] {
       colorway: 'Grey / Silver',
       sku: 'NB-992',
       description: 'Retail price was $185. Asking $320. Box included.',
-      status: 'pending',
+      status: 'active',
     },
   ]
   window.localStorage.setItem(PRODUCTS_KEY, safeJsonStringify(seeded))
@@ -241,30 +292,10 @@ export function saveDemoProducts(products: DemoProductStored[]) {
   window.localStorage.setItem(PRODUCTS_KEY, safeJsonStringify(products))
 }
 
-export function getDemoPendingProducts(): DemoProductStored[] {
-  return getOrSeedDemoProducts().filter((p) => p.status === 'pending')
-}
-
-export function approveDemoProduct(id: string) {
-  const current = getOrSeedDemoProducts()
-  const next = current.map((p) => (p.id === id ? { ...p, status: 'approved' } : p))
-  saveDemoProducts(next)
-  return next
-}
-
-export function rejectDemoProduct(id: string, note?: string) {
-  const current = getOrSeedDemoProducts()
-  const next = current.map((p) =>
-    p.id === id ? { ...p, status: 'rejected', rejectNote: note ?? null } : p,
-  )
-  saveDemoProducts(next)
-  return next
-}
-
 export function upsertDemoProduct(p: { id?: string; status?: string } & Omit<DemoProduct, 'id'>) {
   const current = getOrSeedDemoProducts()
   const id = p.id ?? `prod-${Date.now()}`
-  const entry: DemoProductStored = { id, status: p.status ?? 'pending', ...p }
+  const entry: DemoProductStored = { id, status: p.status ?? 'active', ...p }
   const next = current.some((x) => x.id === id)
     ? current.map((x) => (x.id === id ? entry : x))
     : [entry, ...current]
@@ -313,9 +344,6 @@ export type DemoMessage = {
   createdAt: string // ISO string
 }
 
-const ORDERS_KEY = 'soletrack_demo_orders_v1'
-const MESSAGES_KEY = 'soletrack_demo_messages_v1'
-
 export function getDemoOrders(): DemoOrder[] {
   if (typeof window === 'undefined') return []
   const existing = safeJsonParse<DemoOrder[]>(window.localStorage.getItem(ORDERS_KEY))
@@ -326,9 +354,9 @@ export function getDemoOrders(): DemoOrder[] {
     id: 'order-demo-seed-1',
     checkoutId: 'demo-checkout-001',
     status: 'placed',
-    buyerUid: '__demo__buyer',
+    buyerUid: DEMO_BUYER_UID,
     buyerEmail: 'buyer@soletrack.app',
-    vendorUid: '__demo__me',
+    vendorUid: DEMO_SELLER_UID,
     vendorName: 'Demo Vault',
     pickupName: 'Demo Buyer',
     pickupEmail: 'buyer@soletrack.app',
@@ -362,7 +390,7 @@ export function getDemoOrders(): DemoOrder[] {
         },
         {
           id: 'msg-seed-2',
-          senderUid: '__demo__me',
+          senderUid: DEMO_SELLER_UID,
           text: "Hey! Saturday 2pm works great. I'll have the box ready. See you then!",
           createdAt: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
         },
@@ -402,11 +430,65 @@ export function addDemoOrder(order: Omit<DemoOrder, 'id' | 'createdAt'>): DemoOr
   return newOrder
 }
 
+function upsertDemoSalesFromPickedUpOrder(orderId: string, order: DemoOrder) {
+  const current = getOrSeedDemoSales()
+  const withoutCurrentOrder = current.filter((s) => !(s.source === 'order' && s.orderId === orderId))
+  const soldDate = new Date().toISOString().slice(0, 10)
+
+  const orderSales: DemoSale[] = order.items.map((item, index) => {
+    const qty = Math.max(1, Number(item.qty) || 1)
+    return {
+      id: `sale-order-${orderId}-${index}`,
+      shoe: item.nameSnapshot || 'Shoe',
+      size: '-',
+      buyPrice: null,
+      sellPrice: (Number(item.priceSnapshot) || 0) * qty,
+      date: soldDate,
+      platform: 'Pickup',
+      qty,
+      source: 'order',
+      orderId,
+      checkoutId: order.checkoutId,
+    }
+  })
+
+  const next = [...orderSales, ...withoutCurrentOrder]
+  saveDemoSales(next)
+  return next
+}
+
+function markDemoOrderProductsSold(order: DemoOrder) {
+  const currentProducts = getOrSeedDemoProducts()
+  const soldIds = new Set(order.items.map((item) => String(item.productId || '')).filter(Boolean))
+  if (!soldIds.size) return
+
+  const nextProducts = currentProducts.map((product) => {
+    if (!soldIds.has(product.id)) return product
+    return {
+      ...product,
+      status: 'sold',
+      active: false,
+    }
+  })
+  saveDemoProducts(nextProducts)
+}
+
 export function updateDemoOrderStatus(id: string, status: string): DemoOrder | null {
   const current = getDemoOrders()
-  const next = current.map((o) => (o.id === id ? { ...o, status } : o))
+  const target = current.find((o) => o.id === id)
+  if (!target) return null
+
+  const previousStatus = String(target.status ?? '')
+  const updatedOrder: DemoOrder = { ...target, status }
+  const next = current.map((o) => (o.id === id ? updatedOrder : o))
   saveDemoOrders(next)
-  return next.find((o) => o.id === id) ?? null
+
+  if (status === 'picked_up' && previousStatus !== 'picked_up') {
+    upsertDemoSalesFromPickedUpOrder(id, updatedOrder)
+    markDemoOrderProductsSold(updatedOrder)
+  }
+
+  return updatedOrder
 }
 
 // ─── Demo Chat Messages ───────────────────────────────────────────────────────
@@ -483,8 +565,9 @@ export function addDemoSampleListings(vendorUid: string, vendorName: string) {
       platform: 'Local',
     },
   ]
-  // New vendor-submitted listings start as pending, awaiting admin review
-  const next = [...samples.map((s, i) => ({ id: `prod-${Date.now()}-${i}`, status: 'pending', ...s })), ...current]
+  // In demo mode we publish immediately so new listings are visible in Browse.
+  const next = [...samples.map((s, i) => ({ id: `prod-${Date.now()}-${i}`, status: 'active', ...s })), ...current]
   saveDemoProducts(next)
   return next
 }
+

@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuth } from '@/lib/auth'
-import { useRole } from '@/lib/role'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -23,8 +22,6 @@ const router = createRouter({
     { path: '/order/:id', component: () => import('../views/OrderDetail.vue'), meta: { requiresAuth: true } },
     { path: '/sell', component: () => import('../views/Sell.vue'), meta: { requiresAuth: true } },
     { path: '/vendor-orders', component: () => import('../views/VendorOrders.vue'), meta: { requiresAuth: true } },
-    // Admin only
-    { path: '/admin', component: () => import('../views/Admin.vue'), meta: { requiresAuth: true, requiresAdmin: true } },
     { path: '/:pathMatch(.*)*', component: () => import('../views/NotFound.vue') },
   ],
 })
@@ -35,12 +32,6 @@ router.beforeEach(async (to) => {
 
   if (to.path === '/login' && user.value) return (typeof to.query.next === 'string' ? to.query.next : '/account')
   if (to.meta.requiresAuth && !user.value) return { path: '/login', query: { next: to.fullPath } }
-
-  // Admin-only guard — redirect non-admins to home
-  if (to.meta.requiresAdmin) {
-    const { isAdmin } = useRole()
-    if (!isAdmin.value) return { path: '/' }
-  }
 })
 
 export default router

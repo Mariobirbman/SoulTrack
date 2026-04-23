@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   addDoc,
@@ -37,17 +37,44 @@ type ProductDoc = {
   vendorName: string
   name: string
   brand?: string
+  model?: string
   size?: string
   price: number
   condition?: string
   image?: string
+  images?: string[]
   description?: string
+  colorway?: string
+  sku?: string
   active?: boolean
   status?: string
 }
 
-const BRANDS = ['Nike', 'Jordan', 'Adidas', 'New Balance', 'Yeezy', 'Puma', 'Reebok', 'Other'] as const
+type GalleryOption = {
+  key: string
+  src: string
+  kind: 'upload' | 'url'
+  uploadIndex?: number
+}
+
+const BRAND_OPTIONS = ['Nike', 'Jordan', 'Adidas', 'New Balance', 'Puma', 'Reebok', 'Yeezy', 'ASICS', 'Converse', 'Other'] as const
+
+const BRAND_MODELS: Record<string, string[]> = {
+  Nike: ['Dunk Low', 'Dunk High', 'Air Force 1', 'Air Max 1', 'Air Max 90', 'Air Max 95', 'Air Max Plus', 'Zoom Vomero 5', 'Cortez', 'SB Dunk'],
+  Jordan: ['Air Jordan 1', 'Air Jordan 3', 'Air Jordan 4', 'Air Jordan 5', 'Air Jordan 6', 'Air Jordan 11', 'Air Jordan 12', 'Air Jordan 13', 'Jordan 1 Low', 'Jordan 1 Mid'],
+  Adidas: ['Yeezy Boost 350', 'Yeezy Boost 700', 'Samba', 'Campus 00s', 'Gazelle', 'Forum Low', 'UltraBoost', 'Superstar', 'NMD', 'Stan Smith'],
+  'New Balance': ['550', '574', '9060', '2002R', '1906R', '990v3', '990v4', '990v5', '992', '993'],
+  Puma: ['Suede Classic', 'RS-X', 'MB.03', 'Clyde All-Pro', 'Palermo', 'Future Rider'],
+  Reebok: ['Club C 85', 'Classic Leather', 'Question Mid', 'Answer IV', 'Nano X', 'Instapump Fury'],
+  Yeezy: ['Boost 350 V2', 'Boost 700', 'Foam Runner', 'Slide', '500', '450'],
+  ASICS: ['GEL-Kayano 14', 'GEL-1130', 'GEL-Lyte III', 'GEL-NYC', 'GT-2160', 'EX89'],
+  Converse: ['Chuck Taylor All Star', 'Chuck 70', 'One Star', 'Run Star Hike', 'Weapon', 'Pro Leather'],
+  Other: [],
+}
+
 const COMMON_SIZES = ['7', '7.5', '8', '8.5', '9', '9.5', '10', '10.5', '11', '11.5', '12', '13'] as const
+const MAX_IMAGES = 6
+const DEFAULT_IMAGE = '/images/shoes/pexels-jonathanborba-12031204.jpg'
 
 const router = useRouter()
 const { user, ready } = useAuth()
@@ -67,21 +94,76 @@ const vendor = ref<VendorProfile>({
 const products = ref<Array<{ id: string } & ProductDoc>>([])
 const editingId = ref<string | null>(null)
 
-const productForm = ref<Omit<ProductDoc, 'vendorUid' | 'vendorName'> & { colorway?: string; sku?: string }>({
+const productForm = ref({
   name: '',
-  brand: '',
+  brand: 'Nike',
+  model: '',
   size: '',
   price: 0,
   condition: 'New',
-  image: '',
+  imageUrl: '',
+  uploadedImages: [] as string[],
+  coverKey: '',
   description: '',
   colorway: '',
   sku: '',
   active: true,
 })
 
+const customBrand = ref('')
+const selectedModelPreset = ref('')
+const fileInputEl = ref<HTMLInputElement | null>(null)
+const dragActive = ref(false)
+const uploadBusy = ref(false)
+
 const uid = computed(() => user.value?.uid ?? '')
 const canUseMarketplace = computed(() => (demoMode ? !!uid.value : firebaseConfigured && !!db && !!uid.value))
+
+const resolvedBrand = computed(() => {
+  if (productForm.value.brand === 'Other') return customBrand.value.trim()
+  return productForm.value.brand.trim()
+})
+
+const modelSuggestions = computed(() => BRAND_MODELS[productForm.value.brand] ?? [])
+
+const previewName = computed(() => {
+  const explicitName = productForm.value.name.trim()
+  if (explicitName) return explicitName
+  return [resolvedBrand.value, productForm.value.model.trim()].filter(Boolean).join(' ')
+})
+
+const galleryOptions = computed<GalleryOption[]>(() => {
+  const uploads = productForm.value.uploadedImages
+    .map((src, index) => ({ key: `upload-${index}`, src, kind: 'upload' as const, uploadIndex: index }))
+
+  const url = productForm.value.imageUrl.trim()
+  if (!url) return uploads
+
+  const duplicateOfUpload = uploads.some((entry) => entry.src === url)
+  if (duplicateOfUpload) return uploads
+
+  return [...uploads, { key: 'url-fallback', src: url, kind: 'url' as const }]
+})
+
+const previewImage = computed(() => resolveCoverImage() || DEFAULT_IMAGE)
+
+watch(
+  () => productForm.value.brand,
+  () => {
+    selectedModelPreset.value = ''
+    if (productForm.value.brand !== 'Other') customBrand.value = ''
+  },
+)
+
+watch(galleryOptions, (options) => {
+  if (!options.length) {
+    productForm.value.coverKey = ''
+    return
+  }
+  if (!options.some((o) => o.key === productForm.value.coverKey)) {
+    productForm.value.coverKey = options[0]?.key ?? ''
+  }
+})
 
 let stopVendorListener: (() => void) | null = null
 let stopProductsListener: (() => void) | null = null
@@ -96,9 +178,12 @@ onMounted(() => {
       }
       vendorExists.value = true
       vendor.value = getOrSeedDemoVendor()
-      products.value = getOrSeedDemoProducts().filter((p) => p.vendorUid === user.value!.uid) as any
+      products.value = (getOrSeedDemoProducts()
+        .filter((p) => p.vendorUid === user.value!.uid) as any)
+        .sort((a: any, b: any) => String(a.name ?? '').localeCompare(String(b.name ?? '')))
       return
     }
+
     if (!firebaseConfigured || !db) {
       error.value = 'Firebase is not configured yet. Add soletrack/.env.local to enable selling.'
       return
@@ -143,7 +228,7 @@ onMounted(() => {
       (snap) => {
         products.value = snap.docs
           .map((d) => ({ id: d.id, ...(d.data() as ProductDoc) }))
-          .sort((a, b) => a.name.localeCompare(b.name))
+          .sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')))
       },
       () => {
         error.value = 'Could not load your products.'
@@ -156,6 +241,186 @@ onBeforeUnmount(() => {
   stopVendorListener?.()
   stopProductsListener?.()
 })
+
+function openFilePicker() {
+  fileInputEl.value?.click()
+}
+
+function onFilesPicked(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = input.files ? Array.from(input.files) : []
+  if (!files.length) return
+  void addLocalFiles(files)
+  input.value = ''
+}
+
+function onDrop(event: DragEvent) {
+  dragActive.value = false
+  const files = event.dataTransfer?.files ? Array.from(event.dataTransfer.files) : []
+  if (!files.length) return
+  void addLocalFiles(files)
+}
+
+function onDragOver() {
+  dragActive.value = true
+}
+
+function onDragLeave() {
+  dragActive.value = false
+}
+
+async function addLocalFiles(files: File[]) {
+  error.value = ''
+  status.value = ''
+
+  const remaining = MAX_IMAGES - productForm.value.uploadedImages.length
+  if (remaining <= 0) {
+    error.value = `You can upload up to ${MAX_IMAGES} images.`
+    return
+  }
+
+  const imageFiles = files.filter((f) => f.type.startsWith('image/')).slice(0, remaining)
+  if (!imageFiles.length) {
+    error.value = 'Please choose image files only.'
+    return
+  }
+
+  uploadBusy.value = true
+  const nextImages: string[] = []
+  for (const file of imageFiles) {
+    try {
+      const encoded = await compressImage(file)
+      nextImages.push(encoded)
+    } catch {
+      // Skip unreadable files and continue with the rest.
+    }
+  }
+  uploadBusy.value = false
+
+  if (!nextImages.length) {
+    error.value = 'Could not read the selected image files.'
+    return
+  }
+
+  productForm.value.uploadedImages.push(...nextImages)
+  if (!productForm.value.coverKey) {
+    productForm.value.coverKey = 'upload-0'
+  }
+
+  if (files.length > imageFiles.length) {
+    status.value = `Added ${nextImages.length} image(s). Max ${MAX_IMAGES} images per listing.`
+  } else {
+    status.value = `Added ${nextImages.length} image(s).`
+  }
+}
+
+function removeUpload(index: number) {
+  productForm.value.uploadedImages.splice(index, 1)
+}
+
+function clearUploads() {
+  productForm.value.uploadedImages = []
+}
+
+function removeImageUrl() {
+  productForm.value.imageUrl = ''
+}
+
+function setCover(key: string) {
+  productForm.value.coverKey = key
+}
+
+function applyModelPreset() {
+  if (!selectedModelPreset.value) return
+  productForm.value.model = selectedModelPreset.value
+}
+
+function dedupeStrings(values: string[]) {
+  const out: string[] = []
+  for (const value of values) {
+    const trimmed = value.trim()
+    if (!trimmed) continue
+    if (!out.includes(trimmed)) out.push(trimmed)
+  }
+  return out
+}
+
+function resolveCoverImage() {
+  const options = galleryOptions.value
+  if (!options.length) return ''
+  const chosen = options.find((entry) => entry.key === productForm.value.coverKey)
+  return chosen?.src ?? options[0]?.src ?? ''
+}
+
+function collectMedia() {
+  const uploads = productForm.value.uploadedImages.map((src) => src.trim()).filter(Boolean)
+  const urlFallback = productForm.value.imageUrl.trim()
+
+  const all = dedupeStrings([
+    ...uploads,
+    ...(urlFallback ? [urlFallback] : []),
+  ])
+
+  let cover = resolveCoverImage()
+  if (!cover && all.length) cover = all[0] ?? ''
+  if (!cover) return { cover: '', images: [] as string[] }
+
+  const ordered = [...all]
+  const coverIndex = ordered.indexOf(cover)
+  if (coverIndex > 0) {
+    const chosen = ordered.splice(coverIndex, 1)[0]
+    if (chosen) ordered.unshift(chosen)
+  } else if (coverIndex < 0) {
+    ordered.unshift(cover)
+  }
+
+  return { cover, images: ordered }
+}
+
+function fmtPricePreview(price: number) {
+  if (!Number.isFinite(price) || price <= 0) return '-'
+  return String(Math.round(price))
+}
+
+
+async function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('Could not decode image'))
+    img.src = src
+  })
+}
+
+async function compressImage(file: File): Promise<string> {
+  const dataUrl = await fileToDataUrl(file)
+  const img = await loadImage(dataUrl)
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return dataUrl
+
+  const maxDimension = 1400
+  const baseW = Math.max(1, img.width)
+  const baseH = Math.max(1, img.height)
+  const scale = Math.min(1, maxDimension / Math.max(baseW, baseH))
+  canvas.width = Math.max(1, Math.round(baseW * scale))
+  canvas.height = Math.max(1, Math.round(baseH * scale))
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+  if (file.type === 'image/png') {
+    return canvas.toDataURL('image/png')
+  }
+  return canvas.toDataURL('image/jpeg', 0.86)
+}
 
 async function saveVendor() {
   status.value = ''
@@ -182,7 +447,7 @@ async function saveVendor() {
 
   if (!db) return
   try {
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       name: vendor.value.name.trim(),
       location: (vendor.value.location ?? '').trim(),
       description: (vendor.value.description ?? '').trim(),
@@ -201,13 +466,18 @@ async function saveVendor() {
 
 function resetProductForm() {
   editingId.value = null
+  selectedModelPreset.value = ''
+  customBrand.value = ''
   productForm.value = {
     name: '',
-    brand: '',
+    brand: 'Nike',
+    model: '',
     size: '',
     price: 0,
     condition: 'New',
-    image: '',
+    imageUrl: '',
+    uploadedImages: [],
+    coverKey: '',
     description: '',
     colorway: '',
     sku: '',
@@ -215,20 +485,49 @@ function resetProductForm() {
   }
 }
 
-function startEdit(p: { id: string } & ProductDoc & { colorway?: string; sku?: string }) {
+function startEdit(p: { id: string } & ProductDoc) {
   editingId.value = p.id
-  productForm.value = {
-    name: p.name,
-    brand: p.brand ?? '',
-    size: p.size ?? '',
-    price: p.price,
-    condition: p.condition ?? 'New',
-    image: p.image ?? '',
-    description: p.description ?? '',
-    colorway: (p as any).colorway ?? '',
-    sku: (p as any).sku ?? '',
-    active: p.active ?? true,
+
+  const storedImages = Array.isArray((p as any).images)
+    ? (p as any).images.map((src: unknown) => String(src)).filter(Boolean)
+    : []
+  const legacyImage = p.image ? String(p.image) : ''
+  const uploads = dedupeStrings([
+    ...storedImages,
+    ...(legacyImage && !storedImages.includes(legacyImage) ? [legacyImage] : []),
+  ])
+
+  let nextBrand = String(p.brand ?? '')
+  let nextCustomBrand = ''
+  if (!BRAND_OPTIONS.includes(nextBrand as any)) {
+    nextCustomBrand = nextBrand
+    nextBrand = 'Other'
   }
+
+  const coverKey = (() => {
+    if (!legacyImage) return uploads.length ? 'upload-0' : ''
+    const idx = uploads.indexOf(legacyImage)
+    if (idx >= 0) return `upload-${idx}`
+    return uploads.length ? 'upload-0' : ''
+  })()
+
+  productForm.value = {
+    name: String(p.name ?? ''),
+    brand: nextBrand || 'Nike',
+    model: String((p as any).model ?? ''),
+    size: String(p.size ?? ''),
+    price: Number(p.price ?? 0),
+    condition: String(p.condition ?? 'New'),
+    imageUrl: '',
+    uploadedImages: uploads,
+    coverKey,
+    description: String(p.description ?? ''),
+    colorway: String((p as any).colorway ?? ''),
+    sku: String((p as any).sku ?? ''),
+    active: p.active !== false,
+  }
+  customBrand.value = nextCustomBrand
+  selectedModelPreset.value = modelSuggestions.value.includes(productForm.value.model) ? productForm.value.model : ''
   status.value = ''
   error.value = ''
 }
@@ -237,58 +536,86 @@ async function saveProduct() {
   status.value = ''
   error.value = ''
   if (!canUseMarketplace.value || !user.value) return
-  const currentUser = user.value
+
   if (!vendor.value.name.trim()) {
     error.value = 'Save your vendor profile (shop name) before listing products.'
     return
   }
-  if (!productForm.value.name.trim()) {
-    error.value = 'Product name is required.'
+
+  const brand = resolvedBrand.value
+  if (!brand) {
+    error.value = 'Choose a brand. If you selected Other, enter a custom brand name.'
     return
   }
+
+  const model = productForm.value.model.trim()
+  const explicitName = productForm.value.name.trim()
+  const derivedName = explicitName || [brand, model].filter(Boolean).join(' ')
+  if (!derivedName) {
+    error.value = 'Add a model, or enter a listing title.'
+    return
+  }
+
   const price = Number(productForm.value.price)
   if (!Number.isFinite(price) || price <= 0) {
     error.value = 'Enter a valid price.'
     return
   }
 
-  const payload: any = {
-    vendorUid: currentUser.uid,
+  const media = collectMedia()
+  const basePayload: Record<string, unknown> = {
+    vendorUid: user.value.uid,
     vendorName: vendor.value.name.trim(),
-    name: productForm.value.name.trim(),
-    brand: (productForm.value.brand ?? '').trim(),
+    name: derivedName,
+    brand,
+    model,
     size: (productForm.value.size ?? '').trim(),
     price,
     condition: (productForm.value.condition ?? '').trim(),
-    image: (productForm.value.image ?? '').trim(),
+    image: media.cover || '',
+    images: media.images,
     description: (productForm.value.description ?? '').trim(),
-    colorway: ((productForm.value as any).colorway ?? '').trim(),
-    sku: ((productForm.value as any).sku ?? '').trim(),
-    active: productForm.value.active !== false,
-    updatedAt: serverTimestamp(),
+    colorway: (productForm.value.colorway ?? '').trim(),
+    sku: (productForm.value.sku ?? '').trim(),
+    active: true,
+    status: 'active',
   }
 
   if (demoMode) {
-    const demoPayload = editingId.value ? payload : { ...payload, status: 'pending' }
-    const next = upsertDemoProduct({ id: editingId.value ?? undefined, ...demoPayload })
-    products.value = (next.filter((p) => p.vendorUid === currentUser.uid) as any).sort((a: any, b: any) =>
+    const next = upsertDemoProduct({ id: editingId.value ?? undefined, ...(basePayload as any) })
+    products.value = (next.filter((p) => p.vendorUid === user.value!.uid) as any).sort((a: any, b: any) =>
       String(a.name ?? '').localeCompare(String(b.name ?? '')),
     )
-    status.value = editingId.value ? 'Product updated (demo mode).' : 'Product submitted for review (demo mode).'
+    status.value = editingId.value
+      ? 'Product updated and active in Browse (demo mode).'
+      : 'Product listed and visible in Browse (demo mode).'
     resetProductForm()
     return
   }
 
   if (!db) return
   try {
+    const payload: Record<string, unknown> = { ...basePayload, updatedAt: serverTimestamp() }
+    const vendorPayload: Record<string, unknown> = {
+      name: vendor.value.name.trim(),
+      location: (vendor.value.location ?? '').trim(),
+      description: (vendor.value.description ?? '').trim(),
+      contactEmail: (vendor.value.contactEmail ?? '').trim(),
+      minOrder: Math.max(1, Number(vendor.value.minOrder ?? 1) || 1),
+      updatedAt: serverTimestamp(),
+    }
+    if (!vendorExists.value) vendorPayload.createdAt = serverTimestamp()
+    await setDoc(doc(db, 'vendors', user.value.uid), vendorPayload, { merge: true })
+
     if (editingId.value) {
       await updateDoc(doc(db, 'products', editingId.value), payload)
-      status.value = 'Product updated.'
+      status.value = 'Product updated and active in Browse.'
     } else {
-      payload.createdAt = serverTimestamp()
-      payload.status = 'pending'
-      await addDoc(collection(db, 'products'), payload)
-      status.value = 'Product submitted for review. An admin will approve it shortly.'
+      await addDoc(collection(db, 'products'), {
+        ...payload,
+        createdAt: serverTimestamp(),
+      })
+      status.value = 'Product listed and visible in Browse.'
     }
     resetProductForm()
   } catch {
@@ -300,17 +627,18 @@ async function markAsSold(id: string) {
   status.value = ''
   error.value = ''
   if (!canUseMarketplace.value) return
+
   if (demoMode) {
     const current = products.value.find((p) => p.id === id)
     if (!current) return
-    // cast to any to satisfy DemoProduct's required brand field — product is already valid shape
-    const next = upsertDemoProduct({ ...(current as any), status: 'sold' })
+    const next = upsertDemoProduct({ ...(current as any), status: 'sold', active: false })
     products.value = (next.filter((p: any) => p.vendorUid === uid.value) as any).sort((a: any, b: any) =>
       String(a.name ?? '').localeCompare(String(b.name ?? '')),
     )
     status.value = 'Marked as sold (demo mode).'
     return
   }
+
   if (!db) return
   try {
     await updateDoc(doc(db, 'products', id), { status: 'sold', active: false, updatedAt: serverTimestamp() })
@@ -320,10 +648,36 @@ async function markAsSold(id: string) {
   }
 }
 
+async function markAsActive(id: string) {
+  status.value = ''
+  error.value = ''
+  if (!canUseMarketplace.value) return
+
+  if (demoMode) {
+    const current = products.value.find((p) => p.id === id)
+    if (!current) return
+    const next = upsertDemoProduct({ ...(current as any), status: 'active', active: true })
+    products.value = (next.filter((p: any) => p.vendorUid === uid.value) as any).sort((a: any, b: any) =>
+      String(a.name ?? '').localeCompare(String(b.name ?? '')),
+    )
+    status.value = 'Marked as active (demo mode).'
+    return
+  }
+
+  if (!db) return
+  try {
+    await updateDoc(doc(db, 'products', id), { status: 'active', active: true, updatedAt: serverTimestamp() })
+    status.value = 'Listing marked as active.'
+  } catch {
+    error.value = 'Could not update listing.'
+  }
+}
+
 async function removeProduct(id: string) {
   status.value = ''
   error.value = ''
   if (!canUseMarketplace.value) return
+
   if (demoMode) {
     const next = deleteDemoProduct(id)
     products.value = (next.filter((p) => p.vendorUid === uid.value) as any).sort((a: any, b: any) =>
@@ -332,6 +686,7 @@ async function removeProduct(id: string) {
     status.value = 'Product removed (demo mode).'
     return
   }
+
   if (!db) return
   try {
     await deleteDoc(doc(db, 'products', id))
@@ -349,52 +704,61 @@ async function addSampleListings() {
     error.value = 'Save your vendor profile (shop name) first.'
     return
   }
+
   try {
     if (demoMode) {
       const next = addDemoSampleListings(user.value.uid, vendor.value.name.trim())
       products.value = (next.filter((p) => p.vendorUid === uid.value) as any).sort((a: any, b: any) =>
         String(a.name ?? '').localeCompare(String(b.name ?? '')),
       )
-      status.value = 'Sample listings added (demo mode).'
+      status.value = 'Sample listings added and visible in Browse (demo mode).'
       return
     }
+
     if (!db) return
     const samples = [
       {
         name: 'Nike Dunk Low Retro',
         brand: 'Nike',
+        model: 'Dunk Low',
         size: '10',
         price: 165,
         condition: 'New',
         image: '/images/shoes/pexels-dl-nike-dunk-20298285.jpg',
+        images: ['/images/shoes/pexels-dl-nike-dunk-20298285.jpg'],
         description: 'Clean, ready for pickup. Box included.',
       },
       {
         name: 'Air Jordan 1 Retro High OG',
         brand: 'Jordan',
+        model: 'Air Jordan 1',
         size: '10.5',
         price: 305,
         condition: 'DS',
         image: '/images/shoes/pexels-dl-jordan-11281577.jpg',
+        images: ['/images/shoes/pexels-dl-jordan-11281577.jpg'],
         description: 'Deadstock, never worn. Local pickup only.',
       },
       {
         name: 'New Balance 550 White Green',
         brand: 'New Balance',
+        model: '550',
         size: '9.5',
         price: 140,
         condition: 'New',
         image: '/images/shoes/pexels-dl-nb-19882433.jpg',
+        images: ['/images/shoes/pexels-dl-nb-19882433.jpg'],
         description: 'Brand new pair. Great starter flip.',
       },
     ]
 
-    for (const s of samples) {
+    for (const sample of samples) {
       await addDoc(collection(db, 'products'), {
         vendorUid: user.value.uid,
         vendorName: vendor.value.name.trim(),
-        ...s,
+        ...sample,
         active: true,
+        status: 'active',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -404,6 +768,13 @@ async function addSampleListings() {
   } catch {
     error.value = 'Could not add sample listings.'
   }
+}
+
+function listingImage(p: ProductDoc) {
+  const imgs = Array.isArray((p as any).images)
+    ? (p as any).images.map((src: unknown) => String(src)).filter(Boolean)
+    : []
+  return imgs[0] || p.image || DEFAULT_IMAGE
 }
 </script>
 
@@ -423,7 +794,6 @@ async function addSampleListings() {
     <div v-if="error" class="notice error">{{ error }}</div>
     <div v-if="status" class="notice ok">{{ status }}</div>
 
-    <!-- ── Top: vendor profile (compact) ────────────────────────────────── -->
     <section class="card vendor-card">
       <div class="card-head">
         <span class="card-label">Shop profile</span>
@@ -448,12 +818,11 @@ async function addSampleListings() {
         </div>
         <div class="field full">
           <label>About your shop</label>
-          <textarea v-model="vendor.description" rows="2" placeholder="What do you sell? Pickup hours? Specialties?"></textarea>
+          <textarea v-model="vendor.description" rows="2" placeholder="What do you sell? Pickup hours? Specialties?" />
         </div>
       </div>
     </section>
 
-    <!-- ── Listing form + live preview ──────────────────────────────────── -->
     <section class="card listing-card">
       <div class="card-head">
         <span class="card-label">{{ editingId ? 'Edit listing' : 'New listing' }}</span>
@@ -461,59 +830,76 @@ async function addSampleListings() {
       </div>
 
       <div class="listing-layout">
-        <!-- Form -->
         <div class="listing-form">
-          <div class="form-section-label">Shoe details</div>
+          <div class="form-section-label">Sneaker details</div>
           <div class="form-grid">
-            <div class="field full">
-              <label>Shoe name</label>
-              <input v-model="productForm.name" type="text" placeholder="e.g. Air Jordan 1 Retro High OG" />
-            </div>
-            <div class="field full">
+            <div class="field">
               <label>Brand</label>
-              <div class="pill-row">
-                <button
-                  v-for="b in BRANDS"
-                  :key="b"
-                  type="button"
-                  class="pill-btn"
-                  :class="{ active: productForm.brand === b }"
-                  @click="productForm.brand = b"
-                >{{ b }}</button>
-              </div>
+              <select v-model="productForm.brand">
+                <option v-for="brand in BRAND_OPTIONS" :key="brand" :value="brand">{{ brand }}</option>
+              </select>
+            </div>
+
+            <div v-if="productForm.brand === 'Other'" class="field">
+              <label>Custom brand</label>
+              <input v-model="customBrand" type="text" placeholder="Enter brand name" />
+            </div>
+
+            <div class="field">
+              <label>Model presets</label>
+              <select v-model="selectedModelPreset" :disabled="!modelSuggestions.length" @change="applyModelPreset">
+                <option value="">Choose popular model</option>
+                <option v-for="model in modelSuggestions" :key="model" :value="model">{{ model }}</option>
+              </select>
+            </div>
+
+            <div class="field full">
+              <label>Model (autocomplete + manual)</label>
               <input
-                v-if="productForm.brand === 'Other' || !BRANDS.includes((productForm.brand ?? '') as any)"
-                v-model="productForm.brand"
+                v-model="productForm.model"
                 type="text"
-                placeholder="Enter brand name"
-                style="margin-top:6px"
+                list="brand-model-options"
+                placeholder="Type model name or pick a suggested option"
+              />
+              <datalist id="brand-model-options">
+                <option v-for="model in modelSuggestions" :key="`model-${model}`" :value="model" />
+              </datalist>
+            </div>
+
+            <div class="field full">
+              <label>Listing title (optional)</label>
+              <input
+                v-model="productForm.name"
+                type="text"
+                placeholder="Leave blank to auto-generate from brand + model"
               />
             </div>
+
             <div class="field">
               <label>Colorway</label>
-              <input v-model="(productForm as any).colorway" type="text" placeholder="e.g. Bred / Chicago" />
+              <input v-model="productForm.colorway" type="text" placeholder="e.g. Bred / Chicago" />
             </div>
             <div class="field">
               <label>Size (US)</label>
               <div class="pill-row pill-row--sm">
                 <button
-                  v-for="s in COMMON_SIZES"
-                  :key="s"
+                  v-for="size in COMMON_SIZES"
+                  :key="size"
                   type="button"
                   class="pill-btn pill-btn--sm"
-                  :class="{ active: productForm.size === s }"
-                  @click="productForm.size = s"
-                >{{ s }}</button>
+                  :class="{ active: productForm.size === size }"
+                  @click="productForm.size = size"
+                >{{ size }}</button>
               </div>
-              <input v-model="productForm.size" type="text" placeholder="Other size (e.g. W9)" style="margin-top:6px" />
+              <input v-model="productForm.size" type="text" placeholder="Other size (e.g. W9)" style="margin-top: 6px" />
             </div>
             <div class="field">
               <label>SKU / Style code</label>
-              <input v-model="(productForm as any).sku" type="text" placeholder="555088-001" />
+              <input v-model="productForm.sku" type="text" placeholder="555088-001" />
             </div>
           </div>
 
-          <div class="form-section-label" style="margin-top:14px">Pricing &amp; condition</div>
+          <div class="form-section-label section-gap">Pricing &amp; condition</div>
           <div class="form-grid">
             <div class="field">
               <label>Asking price</label>
@@ -526,106 +912,172 @@ async function addSampleListings() {
               <label>Condition</label>
               <div class="condition-row">
                 <button
-                  v-for="c in ['DS', 'New', 'Used']"
-                  :key="c"
+                  v-for="condition in ['DS', 'New', 'Used']"
+                  :key="condition"
                   class="cond-btn"
-                  :class="{ active: productForm.condition === c }"
+                  :class="{ active: productForm.condition === condition }"
                   type="button"
-                  @click="productForm.condition = c"
-                >{{ c }}</button>
+                  @click="productForm.condition = condition"
+                >{{ condition }}</button>
               </div>
             </div>
           </div>
 
-          <div class="form-section-label" style="margin-top:14px">Media &amp; description</div>
+          <div class="form-section-label section-gap">Images</div>
+          <div class="media-stack">
+            <div
+              class="dropzone"
+              :class="{ active: dragActive }"
+              @dragover.prevent="onDragOver"
+              @dragleave.prevent="onDragLeave"
+              @drop.prevent="onDrop"
+              @click="openFilePicker"
+            >
+              <input
+                ref="fileInputEl"
+                class="hidden-file-input"
+                type="file"
+                accept="image/*"
+                multiple
+                @change="onFilesPicked"
+              />
+              <p class="drop-title">Drag and drop shoe photos</p>
+              <p class="drop-sub">or click to upload up to {{ MAX_IMAGES }} images</p>
+              <p v-if="uploadBusy" class="drop-progress">Processing images...</p>
+            </div>
+
+            <div class="media-actions">
+              <button type="button" class="btn sm" @click="openFilePicker">Choose files</button>
+              <button
+                type="button"
+                class="btn sm"
+                :disabled="!productForm.uploadedImages.length"
+                @click="clearUploads"
+              >
+                Remove uploads
+              </button>
+              <span class="media-count">{{ productForm.uploadedImages.length }}/{{ MAX_IMAGES }} uploaded</span>
+            </div>
+
+            <div class="field full">
+              <label>Image URL fallback (optional)</label>
+              <input
+                v-model="productForm.imageUrl"
+                type="url"
+                placeholder="https://example.com/your-shoe.jpg"
+              />
+            </div>
+
+            <div v-if="galleryOptions.length" class="gallery-grid">
+              <div
+                v-for="option in galleryOptions"
+                :key="option.key"
+                class="gallery-item"
+                :class="{ cover: productForm.coverKey === option.key }"
+              >
+                <img :src="option.src" alt="Listing image preview" class="gallery-img" />
+                <span class="gallery-tag">
+                  {{ productForm.coverKey === option.key ? 'Cover image' : option.kind === 'url' ? 'URL fallback' : 'Upload' }}
+                </span>
+                <div class="gallery-actions">
+                  <button type="button" class="btn sm" @click="setCover(option.key)">
+                    {{ productForm.coverKey === option.key ? 'Cover' : 'Set cover' }}
+                  </button>
+                  <button
+                    v-if="option.kind === 'upload'"
+                    type="button"
+                    class="btn sm danger"
+                    @click="removeUpload(option.uploadIndex ?? 0)"
+                  >
+                    Remove
+                  </button>
+                  <button
+                    v-else
+                    type="button"
+                    class="btn sm danger"
+                    @click="removeImageUrl"
+                  >
+                    Remove URL
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section-label section-gap">Description</div>
           <div class="form-grid">
             <div class="field full">
-              <label>Image URL</label>
-              <input v-model="productForm.image" type="text" placeholder="/images/shoes/... or https://..." />
-            </div>
-            <div class="field full">
-              <label>Description</label>
-              <textarea v-model="productForm.description" rows="3" placeholder="Box included? Pickup location? Any flaws?"></textarea>
+              <textarea v-model="productForm.description" rows="3" placeholder="Box included? Pickup location? Any flaws?" />
             </div>
           </div>
 
           <div class="form-footer">
-            <label class="toggle-label">
-              <input v-model="productForm.active" type="checkbox" />
-              Active listing
-            </label>
+            <p class="publish-note">Listings publish active immediately and appear in Browse.</p>
             <div class="form-actions">
               <button v-if="editingId" class="btn sm" @click="resetProductForm">Cancel</button>
               <button class="btn sm primary" :disabled="!canUseMarketplace" @click="saveProduct">
-                {{ editingId ? 'Update' : 'Submit listing' }}
+                {{ editingId ? 'Update listing' : 'List shoe' }}
               </button>
             </div>
           </div>
         </div>
 
-        <!-- Live preview -->
         <div class="listing-preview">
           <div class="preview-label">Preview</div>
           <div class="preview-card">
             <div class="preview-img-wrap">
-              <img
-                class="preview-img"
-                :src="productForm.image || '/images/shoes/pexels-jonathanborba-12031204.jpg'"
-                alt="preview"
-              />
+              <img class="preview-img" :src="previewImage" alt="listing preview" />
               <span class="preview-cond" :class="(productForm.condition || 'New').toLowerCase()">
                 {{ productForm.condition || 'New' }}
               </span>
             </div>
             <div class="preview-body">
-              <div class="preview-name">{{ productForm.name || 'Shoe name' }}</div>
+              <div class="preview-name">{{ previewName || 'Shoe name' }}</div>
               <div class="preview-meta">
-                <span>{{ (productForm as any).colorway || productForm.brand || 'Brand' }}</span>
+                <span>{{ resolvedBrand || 'Brand' }}</span>
+                <span v-if="productForm.model"> · {{ productForm.model }}</span>
                 <span v-if="productForm.size"> · Size {{ productForm.size }}</span>
               </div>
-              <div class="preview-price">${{ productForm.price > 0 ? productForm.price : '—' }}</div>
+              <div class="preview-price">${{ fmtPricePreview(Number(productForm.price)) }}</div>
               <div class="preview-shop">{{ vendor.name || 'Your shop' }}</div>
             </div>
           </div>
-          <p class="preview-note">This is how your listing will appear on Browse after approval.</p>
+          <p class="preview-note">Cover image and details reflect how this listing shows in Browse.</p>
         </div>
       </div>
     </section>
 
-    <!-- ── Your listings ─────────────────────────────────────────────────── -->
-    <section class="card" style="margin-top:16px">
+    <section class="card listings-card">
       <div class="card-head">
         <span class="card-label">Your listings ({{ products.length }})</span>
       </div>
 
-      <div v-if="products.some(p => p.status === 'pending')" class="notice pending-notice">
-        Listings awaiting admin review are not visible to shoppers until approved.
-      </div>
-
-      <div class="listings-list" v-if="products.length">
-        <div class="listing-row" v-for="p in products" :key="p.id">
-          <img class="lr-img" :src="p.image || '/images/shoes/pexels-jonathanborba-12031204.jpg'" :alt="p.name" />
+      <div v-if="products.length" class="listings-list">
+        <div v-for="p in products" :key="p.id" class="listing-row">
+          <img class="lr-img" :src="listingImage(p)" :alt="p.name" />
           <div class="lr-meta">
             <div class="lr-name">{{ p.name }}</div>
             <div class="lr-sub">
               {{ p.brand || '—' }}
+              <template v-if="(p as any).model"> · {{ (p as any).model }}</template>
               <template v-if="(p as any).colorway"> · {{ (p as any).colorway }}</template>
               · Size {{ p.size || '—' }} · ${{ p.price }}
             </div>
-            <div v-if="p.status === 'pending'" class="hint-pending">Awaiting approval — not visible yet.</div>
-            <div v-if="p.status === 'rejected'" class="hint-rejected">Rejected. Edit and resubmit.</div>
+            <div v-if="p.status === 'rejected'" class="hint-rejected">Unavailable.</div>
           </div>
           <div class="lr-right">
-            <span class="status-badge" :class="p.status || 'approved'">
-              {{ p.status === 'pending' ? 'Pending' : p.status === 'rejected' ? 'Rejected' : p.status === 'sold' ? 'Sold' : 'Active' }}
+            <span class="status-badge" :class="p.status || 'active'">
+              {{ p.status === 'rejected' ? 'Unavailable' : p.status === 'sold' ? 'Sold' : 'Active' }}
             </span>
             <button class="btn sm" @click="startEdit(p)" :disabled="p.status === 'sold'">Edit</button>
             <button v-if="p.status !== 'sold'" class="btn sm" @click="markAsSold(p.id)">Sold</button>
+            <button v-else class="btn sm" @click="markAsActive(p.id)">Mark Active</button>
             <button class="btn sm danger" @click="removeProduct(p.id)">Delete</button>
           </div>
         </div>
       </div>
-      <div class="empty" v-else>No listings yet. Submit one above.</div>
+
+      <div v-else class="empty">No listings yet. Submit one above.</div>
     </section>
   </div>
 </template>
@@ -646,7 +1098,6 @@ async function addSampleListings() {
 .sub { margin: 5px 0 0; color: var(--muted); font-size: 0.9rem; }
 .head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
-/* Cards */
 .card {
   border: 1px solid rgba(156, 255, 0, 0.12);
   border-radius: 10px;
@@ -668,14 +1119,10 @@ async function addSampleListings() {
   letter-spacing: -0.01em;
 }
 
-/* Notices */
 .notice { border-radius: 6px; padding: 10px 12px; border: 1px solid; margin-bottom: 12px; font-size: 0.88rem; }
-.notice.error { border-color: rgba(255,50,50,0.35); color: var(--danger); background: rgba(255,50,50,0.06); }
-.notice.ok { border-color: rgba(80,220,120,0.35); color: var(--success); background: rgba(80,220,120,0.06); }
-.pending-notice { border-color: rgba(255,180,0,0.3); color: #f5a623; background: rgba(255,180,0,0.05); }
+.notice.error { border-color: rgba(255, 50, 50, 0.35); color: var(--danger); background: rgba(255, 50, 50, 0.06); }
+.notice.ok { border-color: rgba(80, 220, 120, 0.35); color: var(--success); background: rgba(80, 220, 120, 0.06); }
 
-/* Vendor profile compact grid */
-.vendor-card { }
 .vendor-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -685,7 +1132,6 @@ async function addSampleListings() {
 @media (max-width: 860px) { .vendor-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 520px) { .vendor-grid { grid-template-columns: 1fr; } }
 
-/* Fields */
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field label { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
 .field input,
@@ -694,24 +1140,24 @@ async function addSampleListings() {
   padding: 9px 12px;
   border-radius: 10px;
   border: 1px solid rgba(156, 255, 0, 0.1);
-  background: rgba(255,255,255,0.03);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text);
   font-size: 0.9rem;
   line-height: 1.4;
   transition: border-color 0.15s;
 }
 .field input:focus,
-.field textarea:focus {
+.field textarea:focus,
+.field select:focus {
   outline: none;
   border-color: rgba(156, 255, 0, 0.35);
 }
 .field textarea { resize: vertical; }
 
-/* Listing form + preview layout */
 .listing-layout {
   display: grid;
-  grid-template-columns: 1fr 280px;
-  gap: 20px;
+  grid-template-columns: 1fr 300px;
+  gap: 24px;
   align-items: start;
 }
 @media (max-width: 860px) { .listing-layout { grid-template-columns: 1fr; } }
@@ -722,27 +1168,28 @@ async function addSampleListings() {
   color: var(--muted);
   margin-bottom: 10px;
   padding-bottom: 5px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
+.section-gap { margin-top: 14px; }
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 .form-grid .field.full { grid-column: 1 / -1; }
-@media (max-width: 520px) { .form-grid { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .form-grid { grid-template-columns: 1fr; } }
 
-/* Brand / size quick-select */
 .pill-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
+.pill-row--sm { gap: 4px; }
 .pill-btn {
   padding: 5px 11px;
   border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.10);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   background: transparent;
   color: var(--muted);
   font-size: 0.8rem;
@@ -751,22 +1198,20 @@ async function addSampleListings() {
   transition: border-color 0.15s, color 0.15s;
   white-space: nowrap;
 }
-.pill-btn:hover { border-color: rgba(156,255,0,0.25); color: var(--text); }
+.pill-btn:hover { border-color: rgba(156, 255, 0, 0.25); color: var(--text); }
 .pill-btn.active {
-  border-color: rgba(156,255,0,0.5);
+  border-color: rgba(156, 255, 0, 0.5);
   color: var(--text);
-  background: rgba(156,255,0,0.06);
+  background: rgba(156, 255, 0, 0.06);
 }
-.pill-row--sm { gap: 4px; }
 .pill-btn--sm { padding: 3px 9px; font-size: 0.75rem; }
 
-/* Price input with $ prefix */
 .price-wrap {
   display: flex;
   align-items: center;
   border: 1px solid rgba(156, 255, 0, 0.1);
   border-radius: 10px;
-  background: rgba(255,255,255,0.03);
+  background: rgba(255, 255, 255, 0.03);
   overflow: hidden;
   transition: border-color 0.15s;
 }
@@ -792,128 +1237,243 @@ async function addSampleListings() {
 }
 .price-input:focus { outline: none; }
 
-/* Condition selector */
-.condition-row { display: flex; gap: 6px; }
+.condition-row { display: flex; gap: 8px; }
 .cond-btn {
   flex: 1;
-  padding: 8px 6px;
+  padding: 9px 6px;
   border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.10);
-  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
   color: var(--muted);
   font-size: 0.8rem;
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: 0.03em;
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  transition: border-color 0.2s, color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+.cond-btn:hover {
+  border-color: rgba(156, 255, 0, 0.3);
+  color: var(--text);
+  background: rgba(156, 255, 0, 0.04);
 }
 .cond-btn.active {
   border-color: var(--accent);
   color: var(--accent);
-  background: rgba(156,255,0,0.08);
+  background: rgba(156, 255, 0, 0.1);
+  box-shadow: 0 0 10px rgba(156, 255, 0, 0.12);
 }
 
-/* Form footer */
+.media-stack { display: grid; gap: 12px; }
+.dropzone {
+  border: 2px dashed rgba(156, 255, 0, 0.25);
+  border-radius: 14px;
+  padding: 28px 20px;
+  background: rgba(156, 255, 0, 0.02);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+.dropzone:hover,
+.dropzone.active {
+  border-color: rgba(156, 255, 0, 0.55);
+  background: rgba(156, 255, 0, 0.06);
+  box-shadow: 0 0 24px rgba(156, 255, 0, 0.08);
+}
+.drop-title {
+  margin: 0;
+  color: var(--text);
+  font-weight: 900;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+}
+.drop-sub {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.drop-progress {
+  margin: 10px 0 0;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  animation: pulse-text 1s ease-in-out infinite;
+}
+@keyframes pulse-text {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.hidden-file-input { display: none; }
+
+.media-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.media-count { color: var(--muted); font-size: 0.76rem; margin-left: auto; }
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+.gallery-item {
+  border: 1px solid rgba(156, 255, 0, 0.12);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.02);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.gallery-item:hover {
+  border-color: rgba(156, 255, 0, 0.25);
+}
+.gallery-item.cover {
+  border-color: rgba(156, 255, 0, 0.6);
+  box-shadow: 0 0 14px rgba(156, 255, 0, 0.15);
+}
+.gallery-img {
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  display: block;
+}
+.gallery-tag {
+  display: block;
+  padding: 4px 8px 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.gallery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+}
+
 .form-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255,255,255,0.05);
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(156, 255, 0, 0.07);
   flex-wrap: wrap;
 }
-.toggle-label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.85rem; cursor: pointer; }
+.publish-note { margin: 0; color: var(--muted); font-size: 0.8rem; }
 .form-actions { display: flex; gap: 8px; }
 
-/* Live preview */
-.listing-preview { }
 .preview-label {
   font-size: 0.72rem;
   font-weight: 700;
   color: var(--muted);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 .preview-card {
-  border: 1px solid rgba(156, 255, 0, 0.14);
-  border-radius: 8px;
+  border: 1px solid rgba(156, 255, 0, 0.18);
+  border-radius: 14px;
   overflow: hidden;
-  background: rgba(255,255,255,0.02);
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(156, 255, 0, 0.06) inset;
+  transition: box-shadow 0.25s;
+  position: sticky;
+  top: 80px;
 }
-.preview-img-wrap { position: relative; }
+.preview-card:hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 20px rgba(156, 255, 0, 0.08);
+}
+.preview-img-wrap { position: relative; overflow: hidden; }
 .preview-img {
   width: 100%;
-  height: 210px;
+  height: 220px;
   object-fit: cover;
   display: block;
+  transition: transform 0.4s ease;
 }
+.preview-card:hover .preview-img { transform: scale(1.03); }
 .preview-cond {
   position: absolute;
-  top: 8px;
-  left: 8px;
+  top: 10px;
+  left: 10px;
   font-size: 0.68rem;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: rgba(0,0,0,0.55);
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
   color: var(--text);
+  letter-spacing: 0.04em;
 }
-.preview-cond.ds { color: var(--accent); }
-.preview-cond.new { color: #7ecfff; }
+.preview-cond.ds { color: var(--accent); border: 1px solid rgba(156, 255, 0, 0.3); }
+.preview-cond.new { color: #7ecfff; border: 1px solid rgba(126, 207, 255, 0.3); }
 .preview-cond.used { color: var(--muted); }
-.preview-body { padding: 10px 12px 12px; }
-.preview-name { font-weight: 900; color: var(--text); font-size: 0.95rem; margin-bottom: 3px; }
-.preview-meta { font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; }
-.preview-price { font-size: 1.1rem; font-weight: 900; color: var(--text); margin-bottom: 4px; }
+.preview-body { padding: 14px 14px 16px; }
+.preview-name { font-weight: 900; color: var(--text); font-size: 1rem; margin-bottom: 4px; letter-spacing: -0.015em; }
+.preview-meta { font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; }
+.preview-price { font-size: 1.25rem; font-weight: 900; color: var(--accent); margin-bottom: 4px; letter-spacing: -0.02em; }
 .preview-shop { font-size: 0.75rem; color: var(--muted); }
-.preview-note { font-size: 0.72rem; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+.preview-note { font-size: 0.72rem; color: var(--muted); margin-top: 10px; line-height: 1.5; opacity: 0.7; }
 
-/* Listings table */
+.listings-card { margin-top: 16px; }
 .listings-list { display: grid; gap: 10px; margin-top: 4px; }
 .listing-row {
   display: grid;
-  grid-template-columns: 80px 1fr auto;
+  grid-template-columns: 84px 1fr auto;
   gap: 14px;
   align-items: center;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid rgba(156, 255, 0, 0.1);
-  border-radius: 8px;
-  background: rgba(255,255,255,0.02);
-  transition: border-color 0.15s;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
 }
-.listing-row:hover { border-color: rgba(156,255,0,0.2); }
+.listing-row:hover {
+  border-color: rgba(156, 255, 0, 0.25);
+  background: rgba(156, 255, 0, 0.02);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
 @media (max-width: 600px) {
   .listing-row { grid-template-columns: 68px 1fr; }
   .lr-right { grid-column: 1 / -1; justify-content: flex-start; }
 }
-.lr-img { width: 80px; height: 60px; border-radius: 10px; object-fit: cover; border: 1px solid rgba(156,255,0,0.12); }
+.lr-img {
+  width: 84px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid rgba(156, 255, 0, 0.12);
+  transition: border-color 0.2s;
+}
+.listing-row:hover .lr-img { border-color: rgba(156, 255, 0, 0.28); }
 .lr-meta { min-width: 0; }
 .lr-name { font-weight: 900; color: var(--text); font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lr-sub { font-size: 0.8rem; color: var(--muted); margin-top: 3px; }
-.hint-pending { font-size: 0.75rem; color: #f5a623; margin-top: 3px; }
 .hint-rejected { font-size: 0.75rem; color: var(--danger); margin-top: 3px; }
 .lr-right { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 
-/* Status badges */
 .status-badge {
   font-size: 0.68rem;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 4px;
-  border: 1px solid rgba(156,255,0,0.25);
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(156, 255, 0, 0.3);
   color: var(--accent);
-  background: rgba(156,255,0,0.05);
+  background: rgba(156, 255, 0, 0.07);
   white-space: nowrap;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
-.status-badge.pending { border-color: rgba(255,180,0,0.3); color: #f5a623; background: rgba(255,180,0,0.05); }
-.status-badge.rejected { border-color: rgba(255,50,50,0.3); color: var(--danger); background: rgba(255,50,50,0.05); }
-.status-badge.sold { border-color: rgba(150,150,150,0.25); color: var(--muted); background: transparent; }
+.status-badge.rejected { border-color: rgba(255, 50, 50, 0.35); color: var(--danger); background: rgba(255, 50, 50, 0.07); }
+.status-badge.sold { border-color: rgba(150, 150, 150, 0.2); color: var(--muted); background: transparent; }
 
-/* Buttons */
 .btn {
   padding: 8px 16px;
   border-radius: 10px;
-  border: 1px solid rgba(156,255,0,0.18);
+  border: 1px solid rgba(156, 255, 0, 0.18);
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -924,10 +1484,10 @@ async function addSampleListings() {
   align-items: center;
   transition: border-color 0.15s, background 0.15s;
 }
-.btn:hover { border-color: rgba(156,255,0,0.32); background: rgba(156,255,0,0.04); }
+.btn:hover { border-color: rgba(156, 255, 0, 0.32); background: rgba(156, 255, 0, 0.04); }
 .btn.primary { background: var(--accent); border-color: transparent; color: #0b1205; }
 .btn.primary:hover { background: #b5ff33; }
-.btn.danger { border-color: rgba(255,50,50,0.3); color: var(--danger); }
+.btn.danger { border-color: rgba(255, 50, 50, 0.3); color: var(--danger); }
 .btn.sm { padding: 6px 12px; font-size: 0.78rem; border-radius: 8px; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -937,5 +1497,9 @@ async function addSampleListings() {
   .sell-page { padding: 20px 12px 60px; }
   .page-header { flex-direction: column; align-items: flex-start; }
   .head-actions { width: 100%; }
+  .form-footer { align-items: stretch; }
+  .form-actions { width: 100%; }
+  .form-actions .btn { flex: 1; justify-content: center; }
 }
 </style>
+

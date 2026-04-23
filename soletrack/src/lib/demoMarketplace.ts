@@ -19,16 +19,20 @@ export type DemoProduct = {
   vendorName: string
   name: string
   brand: string
+  model?: string
   size?: string
   price: number
   retailPrice?: number
   condition?: 'New' | 'Used' | 'DS'
   image?: string
+  images?: string[]
   platform?: string
   colorway?: string
   sku?: string
   soldCount?: number
   description?: string
+  active?: boolean
+  status?: string
 }
 
 export const demoVendors: DemoVendor[] = [

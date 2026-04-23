@@ -21,7 +21,7 @@ export async function upsertUserProfile(user: UserLike) {
     updatedAt: serverTimestamp(),
   }
 
-  // Set role and createdAt only on first create — merge preserves existing role (e.g. 'admin')
+  // Set role and createdAt only on first create — merge preserves existing role.
   if (!snap.exists()) {
     payload.role = 'user'
     payload.createdAt = serverTimestamp()

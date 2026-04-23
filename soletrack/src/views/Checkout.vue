@@ -70,7 +70,10 @@ async function validateCartPrices(): Promise<string | null> {
     const snap = await getDoc(doc(db, 'products', l.id))
     if (!snap.exists()) return `Item "${l.name}" is no longer available.`
     const data = snap.data()
-    if (data.status !== 'approved') return `Item "${l.name}" is no longer available for purchase.`
+    const status = String(data.status ?? 'active')
+    if (data.active === false || status === 'sold' || status === 'rejected') {
+      return `Item "${l.name}" is no longer available for purchase.`
+    }
     const serverPrice = Number(data.price ?? 0)
     if (Math.abs(serverPrice - l.price) > 0.01) {
       return `Price for "${l.name}" has changed to ${fmtUSD(serverPrice)}. Please refresh your cart.`

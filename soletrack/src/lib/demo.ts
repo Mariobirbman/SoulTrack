@@ -1,5 +1,4 @@
 const DEMO_KEY = 'soletrack_demo_mode'
-const DEMO_ADMIN_KEY = 'soletrack_demo_admin'
 const DEMO_BUYER_KEY = 'soletrack_demo_buyer'
 
 export function isDemoMode() {
@@ -10,10 +9,6 @@ export function isDemoMode() {
   } catch {
     return false
   }
-}
-
-export function isDemoAdmin() {
-  return false
 }
 
 export function isDemoBuyer() {
@@ -29,15 +24,10 @@ export function enableDemoMode() {
   if (typeof window === 'undefined') return
   try {
     window.localStorage.setItem(DEMO_KEY, '1')
-    window.localStorage.removeItem(DEMO_ADMIN_KEY)
     window.localStorage.removeItem(DEMO_BUYER_KEY)
   } catch {
     // ignore
   }
-}
-
-export function enableDemoAdminMode() {
-  enableDemoMode()
 }
 
 export function enableDemoBuyerMode() {
@@ -45,7 +35,6 @@ export function enableDemoBuyerMode() {
   try {
     window.localStorage.setItem(DEMO_KEY, '1')
     window.localStorage.setItem(DEMO_BUYER_KEY, '1')
-    window.localStorage.removeItem(DEMO_ADMIN_KEY)
   } catch {
     // ignore
   }
@@ -55,7 +44,6 @@ export function disableDemoMode() {
   if (typeof window === 'undefined') return
   try {
     window.localStorage.removeItem(DEMO_KEY)
-    window.localStorage.removeItem(DEMO_ADMIN_KEY)
     window.localStorage.removeItem(DEMO_BUYER_KEY)
   } catch {
     // ignore

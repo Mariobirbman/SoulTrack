@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import type { SalesOrderRow, ShoeAggRow } from '@/lib/salesDataset'
 import { aggregateShoes, loadSalesOrdersCsv } from '@/lib/salesDataset'
 import { simulatePrice } from '@/lib/priceSim'
-import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { collection, onSnapshot, query } from 'firebase/firestore'
 import { db, firebaseConfigured } from '@/lib/firebase'
 import { demoProducts } from '@/lib/demoMarketplace'
 const loading = ref(true)
@@ -15,7 +15,7 @@ const rows = shallowRef<SalesOrderRow[]>([])
 const activeTab = ref<'orders' | 'shoes' | 'marketplace'>('marketplace')
 const isLiveMarketplaceData = computed(() => firebaseConfigured && !!db)
 const marketplaceDataModeLabel = computed(() =>
-  isLiveMarketplaceData.value ? 'Live Firestore (approved listings)' : 'Demo fallback data'
+  isLiveMarketplaceData.value ? 'Live Firestore listings' : 'Demo fallback data'
 )
 
 const search = ref('')
@@ -88,12 +88,20 @@ let stopMarketplaceListener: (() => void) | null = null
 onMounted(() => {
   if (!firebaseConfigured || !db) {
     // fall back to demo products
-    marketplaceProducts.value = demoProducts as any[]
+    marketplaceProducts.value = (demoProducts as any[]).filter((p) => {
+      const status = String((p as any).status ?? 'active')
+      return (p as any).active !== false && status !== 'sold' && status !== 'rejected'
+    })
     return
   }
-  const q = query(collection(db, 'products'), where('status', '==', 'approved'))
+  const q = query(collection(db, 'products'))
   stopMarketplaceListener = onSnapshot(q, (snap) => {
-    const live = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    const live = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((p: any) => {
+        const status = String(p.status ?? 'active')
+        return p.active !== false && status !== 'sold' && status !== 'rejected'
+      })
     marketplaceProducts.value = live.length ? live : (demoProducts as any[])
   }, () => {
     marketplaceProducts.value = demoProducts as any[]
@@ -116,7 +124,7 @@ const avgPriceByBrand = computed(() => {
 
 const maxBrandAvg = computed(() => Math.max(...avgPriceByBrand.value.map((b) => b.avg), 1))
 
-// Monthly listing counts — group approved products by YYYY-MM of createdAt
+// Monthly listing counts — group active products by YYYY-MM of createdAt
 const monthlyListings = computed(() => {
   const map: Record<string, { count: number; totalPrice: number }> = {}
   for (const p of marketplaceProducts.value) {
@@ -590,7 +598,7 @@ function resetPaging() {
             </div>
             <div class="kpi">
               <div class="kpi__label">Avg Rating</div>
-              <div class="kpi__val accent-val">{{ dashboardTotals.avgRating.toFixed(2) }} ★</div>
+              <div class="kpi__val accent-val">{{ dashboardTotals.avgRating.toFixed(2) }}</div>
               <div class="kpi__sub">customer score</div>
             </div>
           </div>
@@ -671,7 +679,7 @@ function resetPaging() {
           <div class="dash-two-col">
             <div class="mkt-card">
               <h2 class="mkt-title">Listings by Brand</h2>
-              <p class="mkt-sub">{{ marketplaceProducts.length }} approved listing{{ marketplaceProducts.length !== 1 ? 's' : '' }} on SoleTrack</p>
+              <p class="mkt-sub">{{ marketplaceProducts.length }} active listing{{ marketplaceProducts.length !== 1 ? 's' : '' }} on SoleTrack</p>
               <div v-if="listingShareByBrand.length" class="bar-chart">
                 <div v-for="b in listingShareByBrand" :key="b.brand" class="bar-row-v2">
                   <div class="brv2-header">
@@ -689,7 +697,7 @@ function resetPaging() {
 
             <div class="mkt-card">
               <h2 class="mkt-title">Recent Listing Activity</h2>
-              <p class="mkt-sub">Last 6 months of approved listings</p>
+              <p class="mkt-sub">Last 6 months of active listings</p>
               <div v-if="listingTrend.length" class="bar-chart">
                 <div v-for="m in listingTrend" :key="m.month" class="bar-row-v2">
                   <div class="brv2-header">

@@ -166,7 +166,7 @@ function submitSearch() {
           </svg>
         </div>
         <h3>Verified Vendors</h3>
-        <p>Every seller goes through admin review before listings go live. Shop with confidence.</p>
+        <p>Seller listings go live immediately, with transparent profiles and order history for confidence.</p>
       </div>
     </div>
   </section>

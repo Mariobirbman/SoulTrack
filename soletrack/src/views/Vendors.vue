@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import { collection, onSnapshot, query } from 'firebase/firestore'
-import { db, firebaseConfigured } from '@/lib/firebase'
+import { db, demoMode, firebaseConfigured } from '@/lib/firebase'
+import { getOrSeedDemoProducts, getOrSeedDemoUser, getOrSeedDemoVendor } from '@/lib/demoStore'
 
 interface Vendor {
   uid: string
@@ -125,6 +126,32 @@ const loadError = ref('')
 let stopVendorsListener: (() => void) | null = null
 onMounted(() => {
   loading.value = true
+
+  if (demoMode) {
+    const demoUser = getOrSeedDemoUser()
+    const demoVendor = getOrSeedDemoVendor()
+    const demoProducts = getOrSeedDemoProducts().filter((p) => p.vendorUid === demoUser.uid)
+    const topBrands = Array.from(new Set(demoProducts.map((p) => p.brand).filter(Boolean))).slice(0, 4)
+
+    vendors.value = [
+      {
+        uid: demoUser.uid,
+        name: demoVendor.name || 'Demo Vault',
+        location: demoVendor.location || '',
+        description: demoVendor.description || '',
+        contactEmail: demoVendor.contactEmail || demoUser.email,
+        minOrder: typeof demoVendor.minOrder === 'number' ? demoVendor.minOrder : 1,
+        badge: 'Verified',
+        platforms: ['Local'],
+        topBrands,
+      },
+      ...vendors.value,
+    ]
+    loadError.value = ''
+    loading.value = false
+    return
+  }
+
   if (!firebaseConfigured || !db) {
     loadError.value = 'Firebase is not configured (showing demo data).'
     loading.value = false
@@ -169,11 +196,6 @@ const filtered = computed(() => {
   return list
 })
 
-function stars(rating?: number) {
-  if (!rating) return ''
-  return '★'.repeat(Math.floor(rating)) + (rating % 1 >= 0.5 ? '½' : '')
-}
-
 const badgeColor: Record<string, string> = {
   'Top Seller': 'var(--accent)',
   'Verified': 'var(--success)',
@@ -217,7 +239,7 @@ const avgRating = computed(() => {
           <span class="vstat-label">Top Sellers</span>
         </div>
         <div class="vstat">
-          <span class="vstat-value">{{ avgRating ? avgRating.toFixed(1) : '0.0' }}★</span>
+          <span class="vstat-value">{{ avgRating ? avgRating.toFixed(1) : '0.0' }}</span>
           <span class="vstat-label">Avg Rating</span>
         </div>
       </div>
@@ -259,13 +281,12 @@ const avgRating = computed(() => {
                   {{ v.badge }}
                 </span>
               </div>
-              <p v-if="v.location" class="vendor-location">📍 {{ v.location }}</p>
+              <p v-if="v.location" class="vendor-location">Location: {{ v.location }}</p>
             </div>
           </div>
 
           <div v-if="v.rating" class="vendor-rating-row">
-            <span class="stars">{{ stars(v.rating) }}</span>
-            <span class="rating-num">{{ v.rating }}</span>
+            <span class="rating-num">{{ v.rating.toFixed(1) }}</span>
             <span v-if="v.reviewCount != null" class="review-count">({{ v.reviewCount }} reviews)</span>
           </div>
 
@@ -311,7 +332,7 @@ const avgRating = computed(() => {
       </div>
 
       <div class="empty-state" v-if="!filtered.length">
-        <p class="empty-icon">🏪</p>
+        <p class="empty-icon">V</p>
         <p>No vendors match your search.</p>
         <button class="btn" @click="searchQuery = ''; selectedBadge = 'All'">Clear filters</button>
       </div>

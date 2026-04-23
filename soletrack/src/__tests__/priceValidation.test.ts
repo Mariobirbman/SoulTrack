@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest'
 
 // ── Pure helper — mirrors validateCartPrices logic in Checkout.vue ──────────
 type CartLine = { id: string; name: string; price: number; vendorUid?: string }
-type FirestoreSnap = { exists: boolean; status?: string; price?: number }
+type FirestoreSnap = { exists: boolean; status?: string; active?: boolean; price?: number }
 
 function validatePrices(
   lines: CartLine[],
@@ -18,7 +18,10 @@ function validatePrices(
   for (const l of realLines) {
     const snap = fetchSnap(l.id)
     if (!snap.exists) return `Item "${l.name}" is no longer available.`
-    if (snap.status !== 'approved') return `Item "${l.name}" is no longer available for purchase.`
+    const status = String(snap.status ?? 'active')
+    if (snap.active === false || status === 'sold' || status === 'rejected') {
+      return `Item "${l.name}" is no longer available for purchase.`
+    }
     const serverPrice = Number(snap.price ?? 0)
     if (Math.abs(serverPrice - l.price) > 0.01) {
       return `Price for "${l.name}" has changed to $${serverPrice.toFixed(2)}. Please refresh your cart.`
@@ -29,34 +32,34 @@ function validatePrices(
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 describe('price validation', () => {
-  const approvedSnap = (price: number): FirestoreSnap => ({
+  const activeSnap = (price: number): FirestoreSnap => ({
     exists: true,
-    status: 'approved',
+    status: 'active',
     price,
   })
 
   it('passes when cart price matches server price exactly', () => {
     const lines: CartLine[] = [{ id: 'p1', name: 'Jordan 1', price: 200, vendorUid: 'v1' }]
-    const result = validatePrices(lines, () => approvedSnap(200))
+    const result = validatePrices(lines, () => activeSnap(200))
     expect(result).toBeNull()
   })
 
   it('passes within the $0.01 float tolerance', () => {
     const lines: CartLine[] = [{ id: 'p1', name: 'Jordan 1', price: 200.005, vendorUid: 'v1' }]
-    const result = validatePrices(lines, () => approvedSnap(200))
+    const result = validatePrices(lines, () => activeSnap(200))
     expect(result).toBeNull()
   })
 
   it('fails when cart price is tampered (too low)', () => {
     const lines: CartLine[] = [{ id: 'p1', name: 'Jordan 1', price: 1, vendorUid: 'v1' }]
-    const result = validatePrices(lines, () => approvedSnap(200))
+    const result = validatePrices(lines, () => activeSnap(200))
     expect(result).toMatch(/Price for "Jordan 1" has changed/)
     expect(result).toMatch(/\$200\.00/)
   })
 
   it('fails when cart price is inflated', () => {
     const lines: CartLine[] = [{ id: 'p1', name: 'Jordan 1', price: 9999, vendorUid: 'v1' }]
-    const result = validatePrices(lines, () => approvedSnap(200))
+    const result = validatePrices(lines, () => activeSnap(200))
     expect(result).toMatch(/Price for "Jordan 1" has changed/)
   })
 
@@ -66,9 +69,15 @@ describe('price validation', () => {
     expect(result).toBe('Item "Jordan 1" is no longer available.')
   })
 
-  it('fails when product is pending (not approved)', () => {
+  it('fails when product is marked sold', () => {
     const lines: CartLine[] = [{ id: 'p1', name: 'Jordan 1', price: 200, vendorUid: 'v1' }]
-    const result = validatePrices(lines, () => ({ exists: true, status: 'pending', price: 200 }))
+    const result = validatePrices(lines, () => ({ exists: true, status: 'sold', price: 200 }))
+    expect(result).toMatch(/no longer available for purchase/)
+  })
+
+  it('fails when product is inactive', () => {
+    const lines: CartLine[] = [{ id: 'p1', name: 'Jordan 1', price: 200, vendorUid: 'v1' }]
+    const result = validatePrices(lines, () => ({ exists: true, active: false, status: 'active', price: 200 }))
     expect(result).toMatch(/no longer available for purchase/)
   })
 
@@ -91,7 +100,7 @@ describe('price validation', () => {
       { id: 'p2', name: 'Dunk Low', price: 1, vendorUid: 'v2' }, // tampered
     ]
     const result = validatePrices(lines, (id) =>
-      approvedSnap(id === 'p1' ? 200 : 150),
+      activeSnap(id === 'p1' ? 200 : 150),
     )
     expect(result).toMatch(/Dunk Low/)
   })
@@ -101,7 +110,7 @@ describe('price validation', () => {
       { id: 'demo-1', name: 'Demo Shoe', price: 1, vendorUid: '__demo' },
       { id: 'real-1', name: 'Real Jordan', price: 300, vendorUid: 'v1' },
     ]
-    const result = validatePrices(lines, () => approvedSnap(300))
+    const result = validatePrices(lines, () => activeSnap(300))
     expect(result).toBeNull()
   })
 })

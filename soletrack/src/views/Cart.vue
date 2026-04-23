@@ -6,6 +6,7 @@ import { demoMode, firebaseConfigured } from '@/lib/firebase'
 
 const { items, subtotal, totalCount, remove, setQty, clear } = useCart()
 const { user } = useAuth()
+const FALLBACK_IMAGE = '/images/shoes/pexels-jonathanborba-12031204.jpg'
 
 function fmtUSD(n: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
@@ -28,7 +29,7 @@ const checkoutReady = computed(() => canCheckout.value && hasItems.value)
     </div>
 
     <div v-if="!hasItems" class="empty">
-      <p class="empty-icon">🛒</p>
+      <p class="empty-icon">Cart</p>
       <p>Your cart is empty.</p>
       <router-link class="btn primary" to="/browse">Browse listings</router-link>
     </div>
@@ -36,7 +37,7 @@ const checkoutReady = computed(() => canCheckout.value && hasItems.value)
     <div v-else class="grid">
       <div class="items">
         <div class="row" v-for="it in items" :key="it.id">
-          <img v-if="it.image" class="img" :src="it.image" :alt="it.name" />
+          <img class="img" :src="it.image || FALLBACK_IMAGE" :alt="it.name" />
           <div class="meta">
             <div class="name">{{ it.name }}</div>
             <div class="price muted">{{ fmtUSD(it.price) }} each</div>
@@ -48,9 +49,11 @@ const checkoutReady = computed(() => canCheckout.value && hasItems.value)
               :id="`qty-${it.id}`"
               type="number"
               min="1"
+              :max="it.maxQty || undefined"
               :value="it.qty"
               @input="setQty(it.id, Number(($event.target as HTMLInputElement).value))"
             />
+            <small v-if="it.maxQty" class="qty-cap muted">Max {{ it.maxQty }}</small>
           </div>
           <div class="line">{{ fmtUSD(it.qty * it.price) }}</div>
           <button class="remove" @click="remove(it.id)" title="Remove">✕</button>
@@ -118,6 +121,7 @@ const checkoutReady = computed(() => canCheckout.value && hasItems.value)
   background: var(--card);
   color: var(--text);
 }
+.qty-cap { font-size: 0.72rem; }
 .line { text-align: right; font-weight: 900; color: var(--text); }
 .remove { border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 1.1rem; }
 .remove:hover { color: var(--danger); }

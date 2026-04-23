@@ -43,6 +43,15 @@ let stopVendorListener: (() => void) | null = null
 let stopProductsListener: (() => void) | null = null
 
 const copiedEmail = ref<string | null>(null)
+const FALLBACK_IMAGE = '/images/shoes/pexels-jonathanborba-12031204.jpg'
+
+function productImage(p: ProductDoc) {
+  const gallery = Array.isArray((p as any).images)
+    ? (p as any).images.map((src: unknown) => String(src)).filter(Boolean)
+    : []
+  return gallery[0] || p.image || FALLBACK_IMAGE
+}
+
 async function copyEmail(email: string) {
   copiedEmail.value = null
   try {
@@ -74,7 +83,10 @@ onMounted(() => {
     products.value = getOrSeedDemoProducts()
       .filter((p) => p.vendorUid === demoUserUid)
       .map((p) => ({ id: p.id, ...(p as any) }))
-      .filter((p) => (p as any).active !== false)
+      .filter((p) => {
+        const status = String((p as any).status ?? 'active')
+        return (p as any).active !== false && status !== 'sold' && status !== 'rejected'
+      })
       .sort((a, b) => a.name.localeCompare(b.name))
     loading.value = false
     return
@@ -104,7 +116,10 @@ onMounted(() => {
     (snap) => {
       products.value = snap.docs
         .map((d) => ({ id: d.id, ...(d.data() as ProductDoc) }))
-        .filter((p) => p.active !== false)
+        .filter((p) => {
+          const status = String((p as any).status ?? 'active')
+          return p.active !== false && status !== 'sold' && status !== 'rejected'
+        })
         .sort((a, b) => a.name.localeCompare(b.name))
     },
     () => {
@@ -126,9 +141,10 @@ function addItem(p: { id: string } & ProductDoc) {
     id: p.id,
     name: p.name,
     price: p.price,
-    image: p.image,
+    image: productImage(p),
     vendorUid: p.vendorUid,
     vendorName: p.vendorName,
+    maxQty: 1,
   })
   cartToast.value = `"${p.name}" added to cart`
   if (toastTimer) clearTimeout(toastTimer)
@@ -157,7 +173,7 @@ function buyNow(p: { id: string } & ProductDoc) {
         <div class="hero__content">
           <div class="kicker">Vendor shop</div>
           <h1 class="title">{{ vendor.name }}</h1>
-          <p v-if="vendor.location" class="sub">📍 {{ vendor.location }}</p>
+          <p v-if="vendor.location" class="sub">Location: {{ vendor.location }}</p>
           <p v-if="vendor.description" class="desc">{{ vendor.description }}</p>
           <div class="actions">
             <router-link class="btn primary" to="/cart">View cart</router-link>
@@ -185,7 +201,7 @@ function buyNow(p: { id: string } & ProductDoc) {
 
         <div v-else class="grid">
           <div class="card" v-for="p in products" :key="p.id">
-            <img class="img" :src="p.image || '/images/shoes/pexels-jonathanborba-12031204.jpg'" :alt="p.name" />
+            <img class="img" :src="productImage(p)" :alt="p.name" />
             <div class="info">
               <div class="top">
                 <div class="name">{{ p.name }}</div>

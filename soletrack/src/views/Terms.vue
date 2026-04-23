@@ -37,7 +37,7 @@
         <li>All listings must accurately describe the item's condition and authenticity.</li>
         <li>Counterfeit, replica, or misrepresented items are strictly prohibited.</li>
         <li>Sellers are solely responsible for fulfilling orders once accepted.</li>
-        <li>Listings are subject to admin review before becoming publicly visible.</li>
+        <li>Listings become publicly visible when posted, subject to platform policy enforcement.</li>
         <li>SoulTrack reserves the right to remove any listing at our discretion.</li>
       </ul>
     </section>

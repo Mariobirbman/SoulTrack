@@ -4,14 +4,17 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { useRoute } from 'vue-router'
 import { useAuth } from '@/lib/auth'
 import { db, demoMode, firebaseConfigured } from '@/lib/firebase'
-import { getDemoBuyerOrders } from '@/lib/demoStore'
+import { isDemoBuyer } from '@/lib/demo'
+import { getDemoBuyerOrders, getDemoVendorOrders } from '@/lib/demoStore'
 
 type VendorOrder = {
   checkoutId: string
   status: string
   buyerUid: string
+  buyerEmail?: string
   vendorUid: string
   vendorName?: string
+  pickupName?: string
   pickupPreferredDateTime?: string
   createdAt?: any
   subtotal?: number
@@ -24,6 +27,15 @@ const { user, ready } = useAuth()
 const loading = ref(true)
 const loadError = ref('')
 const orders = ref<Array<{ id: string } & VendorOrder>>([])
+const demoAsBuyer = ref(true)
+
+const showingIncomingDemoOrders = computed(() => demoMode && !demoAsBuyer.value)
+const title = computed(() => (showingIncomingDemoOrders.value ? 'Incoming Orders' : 'My Orders'))
+const subtitle = computed(() =>
+  showingIncomingDemoOrders.value
+    ? 'Pickup requests placed on your listings.'
+    : 'Your orders, grouped by checkout session.',
+)
 
 let stop: (() => void) | null = null
 
@@ -52,7 +64,10 @@ onMounted(() => {
 
     // ── Demo mode: load from localStorage ───────────────────────────────────
     if (demoMode) {
-      orders.value = getDemoBuyerOrders(user.value.uid) as any
+      demoAsBuyer.value = isDemoBuyer()
+      orders.value = (
+        demoAsBuyer.value ? getDemoBuyerOrders(user.value.uid) : getDemoVendorOrders(user.value.uid)
+      ) as any
       loading.value = false
       return
     }
@@ -95,7 +110,11 @@ const grouped = computed(() => {
   return Array.from(m.entries())
     .map(([checkoutId, list]) => ({
       checkoutId,
-      list: list.sort((a, b) => (a.vendorName ?? '').localeCompare(b.vendorName ?? '')),
+      list: list.sort((a, b) =>
+        showingIncomingDemoOrders.value
+          ? (a.pickupName ?? '').localeCompare(b.pickupName ?? '')
+          : (a.vendorName ?? '').localeCompare(b.vendorName ?? ''),
+      ),
       createdAt: list.reduce((best, o) => (tsToMs(o.createdAt) > tsToMs(best) ? o.createdAt : best), list[0]!.createdAt),
     }))
     .sort((a, b) => tsToMs(b.createdAt) - tsToMs(a.createdAt))
@@ -106,8 +125,8 @@ const grouped = computed(() => {
   <div class="orders-page">
     <div class="head">
       <div>
-        <h1 class="title">My Orders</h1>
-        <p class="sub">Your orders, grouped by checkout session.</p>
+        <h1 class="title">{{ title }}</h1>
+        <p class="sub">{{ subtitle }}</p>
       </div>
       <router-link class="btn" to="/browse">Continue shopping</router-link>
     </div>
@@ -116,7 +135,7 @@ const grouped = computed(() => {
     <div v-else-if="loading" class="notice muted">Loading orders...</div>
 
     <div v-else-if="!orders.length" class="empty muted">
-      No orders yet. Add items to your cart and checkout.
+      {{ showingIncomingDemoOrders ? 'No incoming orders yet.' : 'No orders yet. Add items to your cart and checkout.' }}
     </div>
 
     <div v-else class="sessions">
@@ -132,8 +151,13 @@ const grouped = computed(() => {
         <div class="list">
           <router-link class="order" v-for="o in s.list" :key="o.id" :to="`/order/${o.id}`">
             <div class="left">
-              <div class="vendor">{{ o.vendorName || 'Vendor' }}</div>
-              <div class="muted small">Status: {{ o.status || 'placed' }}</div>
+              <div class="vendor">
+                {{ showingIncomingDemoOrders ? (o.pickupName || o.buyerEmail || 'Buyer') : (o.vendorName || 'Vendor') }}
+              </div>
+              <div class="muted small">
+                Status: {{ o.status || 'placed' }}
+                <template v-if="showingIncomingDemoOrders && o.buyerEmail">· {{ o.buyerEmail }}</template>
+              </div>
             </div>
             <div class="right muted">{{ o.pickupPreferredDateTime || '' }}</div>
           </router-link>

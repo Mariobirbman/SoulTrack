@@ -15,7 +15,6 @@ function applyGuards(
   toFullPath: string,
   toQuery: Record<string, string>,
   user: { uid: string } | null,
-  isAdmin: boolean,
   firebaseConfigured: boolean,
 ): GuardResult {
   if (!firebaseConfigured) return undefined
@@ -30,11 +29,6 @@ function applyGuards(
     return { path: '/login', query: { next: toFullPath } }
   }
 
-  // Require admin
-  if (toMeta.requiresAdmin && !isAdmin) {
-    return { path: '/' }
-  }
-
   return undefined
 }
 
@@ -44,53 +38,43 @@ describe('router guards', () => {
   const FB_OFF = false
 
   it('allows anonymous to visit /browse (public route)', () => {
-    const result = applyGuards('/browse', {}, '/browse', {}, null, false, FB_ON)
+    const result = applyGuards('/browse', {}, '/browse', {}, null, FB_ON)
     expect(result).toBeUndefined()
   })
 
   it('redirects anonymous to /login when visiting auth-required route', () => {
-    const result = applyGuards('/account', { requiresAuth: true }, '/account', {}, null, false, FB_ON)
+    const result = applyGuards('/account', { requiresAuth: true }, '/account', {}, null, FB_ON)
     expect(result).toEqual({ path: '/login', query: { next: '/account' } })
   })
 
   it('redirects anonymous to /login when visiting / (homepage now requires auth)', () => {
-    const result = applyGuards('/', { requiresAuth: true }, '/', {}, null, false, FB_ON)
+    const result = applyGuards('/', { requiresAuth: true }, '/', {}, null, FB_ON)
     expect(result).toEqual({ path: '/login', query: { next: '/' } })
   })
 
   it('preserves ?next query when redirecting to login', () => {
-    const result = applyGuards('/cart', { requiresAuth: true }, '/cart?ref=email', {}, null, false, FB_ON)
+    const result = applyGuards('/cart', { requiresAuth: true }, '/cart?ref=email', {}, null, FB_ON)
     expect((result as any)?.query?.next).toBe('/cart?ref=email')
   })
 
   it('allows authenticated user through auth-required route', () => {
-    const result = applyGuards('/account', { requiresAuth: true }, '/account', {}, { uid: 'u1' }, false, FB_ON)
-    expect(result).toBeUndefined()
-  })
-
-  it('redirects non-admin away from /admin', () => {
-    const result = applyGuards('/admin', { requiresAuth: true, requiresAdmin: true }, '/admin', {}, { uid: 'u1' }, false, FB_ON)
-    expect(result).toEqual({ path: '/' })
-  })
-
-  it('allows admin to access /admin', () => {
-    const result = applyGuards('/admin', { requiresAuth: true, requiresAdmin: true }, '/admin', {}, { uid: 'u1' }, true, FB_ON)
+    const result = applyGuards('/account', { requiresAuth: true }, '/account', {}, { uid: 'u1' }, FB_ON)
     expect(result).toBeUndefined()
   })
 
   it('redirects logged-in user away from /login to /account', () => {
-    const result = applyGuards('/login', {}, '/login', {}, { uid: 'u1' }, false, FB_ON)
+    const result = applyGuards('/login', {}, '/login', {}, { uid: 'u1' }, FB_ON)
     expect(result).toBe('/account')
   })
 
   it('redirects logged-in user at /login to ?next if present', () => {
-    const result = applyGuards('/login', {}, '/login?next=/sell', { next: '/sell' }, { uid: 'u1' }, false, FB_ON)
+    const result = applyGuards('/login', {}, '/login?next=/sell', { next: '/sell' }, { uid: 'u1' }, FB_ON)
     expect(result).toBe('/sell')
   })
 
   it('skips all guards when Firebase is not configured', () => {
     // Even auth-required routes should be accessible when Firebase is off
-    const result = applyGuards('/account', { requiresAuth: true }, '/account', {}, null, false, FB_OFF)
+    const result = applyGuards('/account', { requiresAuth: true }, '/account', {}, null, FB_OFF)
     expect(result).toBeUndefined()
   })
 })

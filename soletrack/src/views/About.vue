@@ -22,22 +22,22 @@
 
       <div class="features-grid">
         <div class="feature-card">
-          <span class="feature-icon">📊</span>
+          <span class="feature-icon">ST</span>
           <h3>Sales Tracking</h3>
           <p>Log every flip. See your buy price, sell price, profit, and platform all in one place.</p>
         </div>
         <div class="feature-card">
-          <span class="feature-icon">🛒</span>
+          <span class="feature-icon">PB</span>
           <h3>Product Browsing</h3>
           <p>Browse available kicks by brand, condition, and price. Watchlist the ones you want.</p>
         </div>
         <div class="feature-card">
-          <span class="feature-icon">🤝</span>
+          <span class="feature-icon">VA</span>
           <h3>Vendor Access</h3>
           <p>Connect with trusted vendors directly. Get the supply you need to keep flipping.</p>
         </div>
         <div class="feature-card">
-          <span class="feature-icon">💡</span>
+          <span class="feature-icon">PI</span>
           <h3>Profit Insights</h3>
           <p>Know exactly how much you've made, your best sale, and your total revenue at a glance.</p>
         </div>

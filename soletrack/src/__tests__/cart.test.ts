@@ -19,10 +19,18 @@ describe('cart — add', () => {
 
   it('increments qty when the same id is added again', () => {
     const { items, add } = freshCart()
+    add({ id: 'p1', name: 'Jordan 1', price: 200 })
+    add({ id: 'p1', name: 'Jordan 1', price: 200 })
+    expect(items.value).toHaveLength(1)
+    expect(items.value[0]!.qty).toBe(2)
+  })
+
+  it('keeps marketplace listing qty capped at 1 by default', () => {
+    const { items, add } = freshCart()
     add({ id: 'p1', name: 'Jordan 1', price: 200, vendorUid: 'v1', vendorName: 'Shop A' })
     add({ id: 'p1', name: 'Jordan 1', price: 200, vendorUid: 'v1', vendorName: 'Shop A' })
     expect(items.value).toHaveLength(1)
-    expect(items.value[0]!.qty).toBe(2)
+    expect(items.value[0]!.qty).toBe(1)
   })
 
   it('updates price on re-add (guards against stale prices)', () => {
@@ -76,6 +84,13 @@ describe('cart — setQty', () => {
     add({ id: 'p1', name: 'Jordan 1', price: 200 })
     setQty('p1', 5)
     expect(items.value[0]!.qty).toBe(5)
+  })
+
+  it('respects marketplace qty cap in setQty', () => {
+    const { items, add, setQty } = freshCart()
+    add({ id: 'p1', name: 'Jordan 1', price: 200, vendorUid: 'v1', vendorName: 'Shop A' })
+    setQty('p1', 5)
+    expect(items.value[0]!.qty).toBe(1)
   })
 
   it('clamps qty to at least 1', () => {

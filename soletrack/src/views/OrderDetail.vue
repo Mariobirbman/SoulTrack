@@ -10,6 +10,7 @@ import {
   query,
   serverTimestamp,
   updateDoc,
+  writeBatch,
 } from 'firebase/firestore'
 import { useAuth } from '@/lib/auth'
 import { db, demoMode, firebaseConfigured } from '@/lib/firebase'
@@ -96,6 +97,45 @@ const nextStatus = computed<string | null>(() => STATUS_STEPS[currentStepIndex.v
 const advancing = ref(false)
 const advanceError = ref('')
 
+async function markPickedUpAndLogSales(orderId: string, currentOrder: VendorOrder, vendorUid: string) {
+  const firestore = db
+  if (!firestore) return
+  const batch = writeBatch(firestore)
+  const soldDate = new Date().toISOString().slice(0, 10)
+
+  currentOrder.items.forEach((item, index) => {
+    const qty = Math.max(1, Number(item.qty) || 1)
+    const saleRef = doc(firestore, 'users', vendorUid, 'sales', `order-${orderId}-${index}`)
+    batch.set(saleRef, {
+      shoe: item.nameSnapshot || 'Shoe',
+      size: '-',
+      buyPrice: null,
+      sellPrice: (Number(item.priceSnapshot) || 0) * qty,
+      date: soldDate,
+      platform: 'Pickup',
+      qty,
+      source: 'order',
+      orderId,
+      checkoutId: currentOrder.checkoutId || '',
+      createdAt: serverTimestamp(),
+    }, { merge: true })
+
+    if (item.productId) {
+      const productRef = doc(firestore, 'products', String(item.productId))
+      batch.set(productRef, {
+        status: 'sold',
+        active: false,
+        soldAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true })
+    }
+  })
+
+  const orderRef = doc(firestore, 'vendorOrders', orderId)
+  batch.update(orderRef, { status: 'picked_up', pickedUpAt: serverTimestamp() })
+  await batch.commit()
+}
+
 async function advanceStatus() {
   if (!order.value || !nextStatus.value) return
   advancing.value = true
@@ -107,6 +147,13 @@ async function advanceStatus() {
       return
     }
     if (!firebaseConfigured || !db || !user.value) return
+    if (nextStatus.value === 'picked_up') {
+      if (user.value.uid !== order.value.vendorUid) {
+        throw new Error('Only the vendor can mark this order as picked up.')
+      }
+      await markPickedUpAndLogSales(id.value, order.value, user.value.uid)
+      return
+    }
     await updateDoc(doc(db, 'vendorOrders', id.value), { status: nextStatus.value })
   } catch {
     advanceError.value = 'Could not update order status. Please try again.'

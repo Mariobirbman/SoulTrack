@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { collection, onSnapshot, query } from 'firebase/firestore'
 import { db, firebaseConfigured } from '@/lib/firebase'
 import { useCart } from '@/lib/cart'
 import type { DemoProduct } from '@/lib/demoMarketplace'
@@ -18,20 +18,32 @@ let stopProductsListener: (() => void) | null = null
 onMounted(() => {
   loading.value = true
   if (!firebaseConfigured || !db) {
-    // Demo mode: only show products that were approved through the real approval flow
-    products.value = getOrSeedDemoProducts().filter((p) => p.status === 'approved') as any
+    // Demo mode: include active, unsold listings so newly posted demo items appear immediately.
+    products.value = getOrSeedDemoProducts().filter((p: any) => {
+      const status = String(p.status ?? 'active')
+      return status !== 'sold' && status !== 'rejected' && p.active !== false
+    }) as any
     loadError.value = ''
     loading.value = false
     return
   }
-  // Firebase mode: only show admin-approved listings
-  const q = query(collection(db, 'products'), where('status', '==', 'approved'))
+  // Firebase mode: show active listings immediately.
+  const q = query(collection(db, 'products'))
   stopProductsListener = onSnapshot(
     q,
     (snap) => {
       products.value = snap.docs
         .map((d) => ({ id: d.id, ...(d.data() as Omit<Product, 'id'>) }))
-        .filter((p) => typeof (p as any).vendorUid === 'string' && (p as any).vendorUid.length > 0)
+        .filter((p) => {
+          const status = String((p as any).status ?? 'active')
+          return (
+            typeof (p as any).vendorUid === 'string'
+            && (p as any).vendorUid.length > 0
+            && (p as any).active !== false
+            && status !== 'sold'
+            && status !== 'rejected'
+          )
+        })
       loadError.value = ''
       loading.value = false
     },
@@ -110,6 +122,15 @@ const conditionColor: Record<string, string> = {
   Used: 'var(--muted)',
 }
 
+const FALLBACK_IMAGE = '/images/shoes/pexels-jonathanborba-12031204.jpg'
+
+function productImage(p: Product) {
+  const gallery = Array.isArray((p as any).images)
+    ? (p as any).images.map((src: unknown) => String(src)).filter(Boolean)
+    : []
+  return gallery[0] || p.image || FALLBACK_IMAGE
+}
+
 function profitMargin(p: { price: number; retailPrice?: number }) {
   if (!p.retailPrice || p.retailPrice <= 0) return 0
   return Math.round(((p.price - p.retailPrice) / p.retailPrice) * 100)
@@ -124,9 +145,10 @@ function addProductToCart(p: Product) {
     id: p.id,
     name: p.name,
     price: p.price,
-    image: p.image,
+    image: productImage(p),
     vendorUid: p.vendorUid,
     vendorName: p.vendorName,
+    maxQty: 1,
   })
   cartToast.value = `"${p.name}" added to cart`
   if (toastTimer) clearTimeout(toastTimer)
@@ -180,7 +202,7 @@ function addProductToCart(p: Product) {
     <div class="product-grid" v-if="filtered.length">
       <div class="product-card" v-for="p in filtered" :key="p.id">
         <div class="product-img-wrap">
-          <img :src="p.image || '/images/shoes/pexels-jonathanborba-12031204.jpg'" :alt="p.name" class="product-img" />
+          <img :src="productImage(p)" :alt="p.name" class="product-img" />
           <button
             class="watchlist-btn"
             :class="{ watched: isWatched(p.id) }"

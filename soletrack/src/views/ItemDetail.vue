@@ -22,10 +22,28 @@ const conditionColor: Record<string, string> = {
   Used: 'var(--muted)',
 }
 
+const FALLBACK_IMAGE = '/images/shoes/pexels-jonathanborba-12031204.jpg'
+
+function productImage(item: any) {
+  const gallery = Array.isArray(item?.images)
+    ? item.images.map((src: unknown) => String(src)).filter(Boolean)
+    : []
+  return gallery[0] || item?.image || FALLBACK_IMAGE
+}
+
 const margin = computed(() => {
   if (!product.value?.retailPrice || product.value.retailPrice <= 0) return null
   return Math.round(((product.value.price - product.value.retailPrice) / product.value.retailPrice) * 100)
 })
+
+const normalizedStatus = computed(() => {
+  const raw = String(product.value?.status ?? 'active').toLowerCase()
+  if (raw === 'sold') return 'sold'
+  if (raw === 'rejected') return 'rejected'
+  return 'active'
+})
+
+const statusLabel = computed(() => (normalizedStatus.value === 'sold' ? 'Sold' : normalizedStatus.value === 'rejected' ? 'Unavailable' : 'Active'))
 
 onMounted(async () => {
   const id = route.params.id as string
@@ -65,9 +83,10 @@ function handleAddToCart() {
     id: product.value.id,
     name: product.value.name,
     price: product.value.price,
-    image: product.value.image,
+    image: productImage(product.value),
     vendorUid: product.value.vendorUid,
     vendorName: product.value.vendorName,
+    maxQty: 1,
   })
   cartToast.value = `"${product.value.name}" added to cart`
   if (toastTimer) clearTimeout(toastTimer)
@@ -95,7 +114,7 @@ function handleAddToCart() {
         <div class="img-col">
           <div class="img-wrap">
             <img
-              :src="product.image || '/images/shoes/pexels-jonathanborba-12031204.jpg'"
+              :src="productImage(product)"
               :alt="product.name"
               class="product-img"
             />
@@ -119,7 +138,7 @@ function handleAddToCart() {
           <p v-if="product.colorway" class="colorway">{{ product.colorway }}</p>
 
           <!-- Status badge -->
-          <span class="status-badge" :class="product.status">{{ product.status }}</span>
+          <span class="status-badge" :class="normalizedStatus">{{ statusLabel }}</span>
 
           <!-- Meta pills -->
           <div class="meta-row">
@@ -165,10 +184,10 @@ function handleAddToCart() {
           <div class="actions">
             <button
               class="btn primary"
-              :disabled="product.status === 'sold'"
+              :disabled="normalizedStatus === 'sold'"
               @click="handleAddToCart"
             >
-              {{ product.status === 'sold' ? 'Sold Out' : 'Add to Cart' }}
+              {{ normalizedStatus === 'sold' ? 'Sold Out' : 'Add to Cart' }}
             </button>
             <router-link
               v-if="product.vendorUid"
@@ -290,8 +309,7 @@ function handleAddToCart() {
   border-radius: 6px;
   margin-bottom: 16px;
 }
-.status-badge.approved  { background: rgba(156,255,0,0.12); color: var(--accent); border: 1px solid rgba(156,255,0,0.3); }
-.status-badge.pending   { background: rgba(255,200,0,0.1);  color: #f5c542;       border: 1px solid rgba(255,200,0,0.3); }
+.status-badge.active    { background: rgba(156,255,0,0.12); color: var(--accent); border: 1px solid rgba(156,255,0,0.3); }
 .status-badge.sold      { background: rgba(255,80,80,0.1);  color: var(--danger); border: 1px solid rgba(255,80,80,0.3); }
 .status-badge.rejected  { background: rgba(255,80,80,0.1);  color: var(--danger); border: 1px solid rgba(255,80,80,0.3); }
 
