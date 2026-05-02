@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore'
@@ -228,7 +228,7 @@ function buyNow(p: { id: string } & ProductDoc) {
 
 <style scoped>
 .shop-page { background: var(--bg); }
-.notice { max-width: 1100px; margin: 14px auto; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(156, 255, 0, 0.12); }
+.notice { max-width: 1100px; margin: 14px auto; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(var(--accent-rgb), 0.12); }
 .notice.error { border-color: rgba(255,50,50,0.35); color: var(--danger); background: rgba(255,50,50,0.06); }
 .notice.muted { color: var(--muted); background: rgba(255,255,255,0.02); }
 
@@ -263,7 +263,7 @@ function buyNow(p: { id: string } & ProductDoc) {
 .muted { color: var(--muted); }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 16px; }
-.card { border: 1px solid rgba(156, 255, 0, 0.12); border-radius: 16px; overflow: hidden; background: rgba(255,255,255,0.02); }
+.card { border: 1px solid rgba(var(--accent-rgb), 0.12); border-radius: 16px; overflow: hidden; background: rgba(255,255,255,0.02); }
 .img { width: 100%; height: 190px; object-fit: cover; display: block; }
 .info { padding: 14px; }
 .top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
@@ -279,7 +279,7 @@ function buyNow(p: { id: string } & ProductDoc) {
   justify-content: center;
   padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(156, 255, 0, 0.15);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   background: transparent;
   color: var(--text);
   cursor: pointer;

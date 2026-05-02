@@ -1,11 +1,10 @@
-<template>
+﻿<template>
   <footer class="site-footer">
     <div class="footer-inner">
 
       <!-- Brand column -->
       <div class="footer-brand">
         <router-link to="/" class="footer-logo">
-          <span class="footer-logo__mark">ST</span>
           <span class="footer-logo__name">SoleTrack</span>
         </router-link>
         <p class="footer-tagline">
@@ -72,7 +71,7 @@
 <style scoped>
 .site-footer {
   background: #060f07;
-  border-top: 1px solid rgba(156, 255, 0, 0.1);
+  border-top: 1px solid rgba(var(--accent-rgb), 0.1);
   margin-top: 0;
 }
 
@@ -94,18 +93,13 @@
   margin-bottom: 14px;
 }
 
-.footer-logo__mark {
-  background: var(--accent);
-  color: #0b1205;
-  font-weight: 900;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  width: 30px;
-  height: 30px;
+.footer-logo__img {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
   border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   flex-shrink: 0;
 }
 
@@ -132,11 +126,9 @@
 
 /* Nav columns */
 .footer-nav__heading {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--accent);
+  color: var(--text);
   margin: 0 0 14px;
 }
 
@@ -168,9 +160,9 @@
 }
 
 .footer-stat {
-  background: linear-gradient(160deg, rgba(156, 255, 0, 0.04) 0%, var(--card) 60%);
-  border: 1px solid rgba(156, 255, 0, 0.12);
-  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
@@ -185,10 +177,8 @@
 }
 
 .footer-stat__label {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 /* Bottom strip */

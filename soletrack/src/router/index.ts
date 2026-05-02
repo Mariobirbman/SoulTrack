@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuth } from '@/lib/auth'
+import { isDemoMode, isDemoAdmin } from '@/lib/demo'
+import { isAuthBypassEnabled } from '@/lib/runtimeFlags'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -22,16 +24,30 @@ const router = createRouter({
     { path: '/order/:id', component: () => import('../views/OrderDetail.vue'), meta: { requiresAuth: true } },
     { path: '/sell', component: () => import('../views/Sell.vue'), meta: { requiresAuth: true } },
     { path: '/vendor-orders', component: () => import('../views/VendorOrders.vue'), meta: { requiresAuth: true } },
+    { path: '/admin', component: () => import('../views/Admin.vue'), meta: { requiresAuth: true, requiresAdmin: true } },
     { path: '/:pathMatch(.*)*', component: () => import('../views/NotFound.vue') },
   ],
 })
 
 router.beforeEach(async (to) => {
+  if (isAuthBypassEnabled()) return
+
   const { user, ready } = useAuth()
   await ready
 
   if (to.path === '/login' && user.value) return (typeof to.query.next === 'string' ? to.query.next : '/account')
   if (to.meta.requiresAuth && !user.value) return { path: '/login', query: { next: to.fullPath } }
+  if (to.meta.requiresAdmin) {
+    if (isDemoMode()) {
+      if (!isDemoAdmin()) return '/'
+    } else {
+      const adminUid = import.meta.env.VITE_ADMIN_UID as string | undefined
+      const isAdmin = adminUid
+        ? user.value?.uid === adminUid
+        : (user.value as any)?.role === 'admin'
+      if (!isAdmin) return '/'
+    }
+  }
 })
 
 export default router

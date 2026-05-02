@@ -1,5 +1,7 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { getBrandStat, getDelta, type BrandStat } from '@/lib/useBrandStats'
+import { deltaLabel as formatDeltaLabel, priceColorClass } from '@/lib/marketIntel'
 import { useRouter } from 'vue-router'
 import {
   addDoc,
@@ -15,6 +17,7 @@ import {
 } from 'firebase/firestore'
 import { useAuth } from '@/lib/auth'
 import { db, demoMode, firebaseConfigured } from '@/lib/firebase'
+import { isAuthBypassEnabled } from '@/lib/runtimeFlags'
 import {
   addDemoSampleListings,
   deleteDemoProduct,
@@ -115,9 +118,17 @@ const selectedModelPreset = ref('')
 const fileInputEl = ref<HTMLInputElement | null>(null)
 const dragActive = ref(false)
 const uploadBusy = ref(false)
+const authBypass = isAuthBypassEnabled()
 
 const uid = computed(() => user.value?.uid ?? '')
 const canUseMarketplace = computed(() => (demoMode ? !!uid.value : firebaseConfigured && !!db && !!uid.value))
+
+const currentBrandStat = ref<BrandStat | null>(null)
+const marketDelta = ref<number | null>(null)
+
+function fmtNum(n: number) {
+  return new Intl.NumberFormat('en-US').format(n)
+}
 
 const resolvedBrand = computed(() => {
   if (productForm.value.brand === 'Other') return customBrand.value.trim()
@@ -172,14 +183,14 @@ onMounted(() => {
   ;(async () => {
     await ready
     if (demoMode) {
-      if (!user.value) {
+      if (!user.value && !authBypass) {
         router.push('/login')
         return
       }
       vendorExists.value = true
       vendor.value = getOrSeedDemoVendor()
       products.value = (getOrSeedDemoProducts()
-        .filter((p) => p.vendorUid === user.value!.uid) as any)
+        .filter((p) => !user.value || p.vendorUid === user.value.uid) as any)
         .sort((a: any, b: any) => String(a.name ?? '').localeCompare(String(b.name ?? '')))
       return
     }
@@ -188,8 +199,12 @@ onMounted(() => {
       error.value = 'Firebase is not configured yet. Add soletrack/.env.local to enable selling.'
       return
     }
-    if (!user.value) {
+    if (!user.value && !authBypass) {
       router.push('/login')
+      return
+    }
+    if (!user.value) {
+      error.value = 'Auth bypass is on. Some seller actions are disabled without a live user session.'
       return
     }
 
@@ -236,6 +251,25 @@ onMounted(() => {
     )
   })()
 })
+
+watch(
+  [resolvedBrand, () => Number(productForm.value.price)],
+  async ([brand, price]) => {
+    currentBrandStat.value = await getBrandStat(brand)
+    marketDelta.value = await getDelta(price, brand)
+  },
+  { immediate: true },
+)
+
+const sellerDeltaText = computed(() => {
+  const currentPrice = Number(productForm.value.price)
+  if (!Number.isFinite(currentPrice) || currentPrice <= 0) return ''
+  if (marketDelta.value === null) return ''
+  if (marketDelta.value === 0) return 'Your price is at market'
+  return `Your price is ${formatDeltaLabel(marketDelta.value).toLowerCase()}`
+})
+
+const sellerDeltaClass = computed(() => (marketDelta.value === null ? '' : priceColorClass(marketDelta.value)))
 
 onBeforeUnmount(() => {
   stopVendorListener?.()
@@ -563,6 +597,7 @@ async function saveProduct() {
   }
 
   const media = collectMedia()
+  const isNew = !editingId.value
   const basePayload: Record<string, unknown> = {
     vendorUid: user.value.uid,
     vendorName: vendor.value.name.trim(),
@@ -577,18 +612,26 @@ async function saveProduct() {
     description: (productForm.value.description ?? '').trim(),
     colorway: (productForm.value.colorway ?? '').trim(),
     sku: (productForm.value.sku ?? '').trim(),
-    active: true,
-    status: 'active',
+    // New listings start as pending — admin must approve before Browse shows them
+    ...(isNew
+      ? { active: false, status: 'pending' }
+      : {}),
   }
 
   if (demoMode) {
-    const next = upsertDemoProduct({ id: editingId.value ?? undefined, ...(basePayload as any) })
+    const demoPayload: Record<string, unknown> = { ...basePayload }
+    if (!isNew) {
+      const existing = products.value.find((p) => p.id === editingId.value)
+      demoPayload.active = (existing as any)?.active ?? false
+      demoPayload.status = (existing as any)?.status ?? 'pending'
+    }
+    const next = upsertDemoProduct({ id: editingId.value ?? undefined, ...(demoPayload as any) })
     products.value = (next.filter((p) => p.vendorUid === user.value!.uid) as any).sort((a: any, b: any) =>
       String(a.name ?? '').localeCompare(String(b.name ?? '')),
     )
     status.value = editingId.value
-      ? 'Product updated and active in Browse (demo mode).'
-      : 'Product listed and visible in Browse (demo mode).'
+      ? 'Listing updated.'
+      : 'Listing submitted — pending admin approval before it appears in Browse.'
     resetProductForm()
     return
   }
@@ -609,13 +652,13 @@ async function saveProduct() {
 
     if (editingId.value) {
       await updateDoc(doc(db, 'products', editingId.value), payload)
-      status.value = 'Product updated and active in Browse.'
+      status.value = 'Listing updated.'
     } else {
       await addDoc(collection(db, 'products'), {
         ...payload,
         createdAt: serverTimestamp(),
       })
-      status.value = 'Product listed and visible in Browse.'
+      status.value = 'Listing submitted — pending admin approval before it appears in Browse.'
     }
     resetProductForm()
   } catch {
@@ -801,24 +844,24 @@ function listingImage(p: ProductDoc) {
       </div>
       <div class="vendor-grid">
         <div class="field">
-          <label>Shop name</label>
-          <input v-model="vendor.name" type="text" placeholder="Your shop name" />
+          <label for="vendor-name">Shop name</label>
+          <input id="vendor-name" name="vendorName" v-model="vendor.name" type="text" placeholder="Your shop name" />
         </div>
         <div class="field">
-          <label>Location</label>
-          <input v-model="vendor.location" type="text" placeholder="City, State" />
+          <label for="vendor-location">Location</label>
+          <input id="vendor-location" name="vendorLocation" v-model="vendor.location" type="text" placeholder="City, State" />
         </div>
         <div class="field">
-          <label>Contact email</label>
-          <input v-model="vendor.contactEmail" type="email" placeholder="you@example.com" />
+          <label for="vendor-email">Contact email</label>
+          <input id="vendor-email" name="vendorEmail" v-model="vendor.contactEmail" type="email" placeholder="you@example.com" />
         </div>
         <div class="field">
-          <label>Min order (pairs)</label>
-          <input v-model="vendor.minOrder" type="number" min="1" />
+          <label for="vendor-min-order">Min order (pairs)</label>
+          <input id="vendor-min-order" name="vendorMinOrder" v-model="vendor.minOrder" type="number" min="1" />
         </div>
         <div class="field full">
-          <label>About your shop</label>
-          <textarea v-model="vendor.description" rows="2" placeholder="What do you sell? Pickup hours? Specialties?" />
+          <label for="vendor-description">About your shop</label>
+          <textarea id="vendor-description" name="vendorDescription" v-model="vendor.description" rows="2" placeholder="What do you sell? Pickup hours? Specialties?" />
         </div>
       </div>
     </section>
@@ -834,28 +877,31 @@ function listingImage(p: ProductDoc) {
           <div class="form-section-label">Sneaker details</div>
           <div class="form-grid">
             <div class="field">
-              <label>Brand</label>
-              <select v-model="productForm.brand">
+              <label for="product-brand">Brand</label>
+              <select id="product-brand" name="productBrand" v-model="productForm.brand">
                 <option v-for="brand in BRAND_OPTIONS" :key="brand" :value="brand">{{ brand }}</option>
               </select>
             </div>
 
             <div v-if="productForm.brand === 'Other'" class="field">
-              <label>Custom brand</label>
-              <input v-model="customBrand" type="text" placeholder="Enter brand name" />
+              <label for="custom-brand">Custom brand</label>
+              <input id="custom-brand" name="customBrand" v-model="customBrand" type="text" placeholder="Enter brand name" />
             </div>
 
-            <div class="field">
-              <label>Model presets</label>
-              <select v-model="selectedModelPreset" :disabled="!modelSuggestions.length" @change="applyModelPreset">
+            <div class="field field--preset">
+              <label for="model-preset">Model presets</label>
+              <select id="model-preset" name="modelPreset" v-model="selectedModelPreset" :disabled="!modelSuggestions.length" @change="applyModelPreset">
                 <option value="">Choose popular model</option>
                 <option v-for="model in modelSuggestions" :key="model" :value="model">{{ model }}</option>
               </select>
+              <p class="field-help">Choose a preset to autofill the model, then fine-tune manually if needed.</p>
             </div>
 
             <div class="field full">
-              <label>Model (autocomplete + manual)</label>
+              <label for="product-model">Model (autocomplete + manual)</label>
               <input
+                id="product-model"
+                name="productModel"
                 v-model="productForm.model"
                 type="text"
                 list="brand-model-options"
@@ -867,8 +913,10 @@ function listingImage(p: ProductDoc) {
             </div>
 
             <div class="field full">
-              <label>Listing title (optional)</label>
+              <label for="listing-title">Listing title (optional)</label>
               <input
+                id="listing-title"
+                name="listingTitle"
                 v-model="productForm.name"
                 type="text"
                 placeholder="Leave blank to auto-generate from brand + model"
@@ -876,11 +924,11 @@ function listingImage(p: ProductDoc) {
             </div>
 
             <div class="field">
-              <label>Colorway</label>
-              <input v-model="productForm.colorway" type="text" placeholder="e.g. Bred / Chicago" />
+              <label for="product-colorway">Colorway</label>
+              <input id="product-colorway" name="productColorway" v-model="productForm.colorway" type="text" placeholder="e.g. Bred / Chicago" />
             </div>
             <div class="field">
-              <label>Size (US)</label>
+              <label for="product-size">Size (US)</label>
               <div class="pill-row pill-row--sm">
                 <button
                   v-for="size in COMMON_SIZES"
@@ -891,21 +939,38 @@ function listingImage(p: ProductDoc) {
                   @click="productForm.size = size"
                 >{{ size }}</button>
               </div>
-              <input v-model="productForm.size" type="text" placeholder="Other size (e.g. W9)" style="margin-top: 6px" />
+              <input id="product-size" name="productSize" v-model="productForm.size" type="text" placeholder="Other size (e.g. W9)" style="margin-top: 6px" />
             </div>
             <div class="field">
-              <label>SKU / Style code</label>
-              <input v-model="productForm.sku" type="text" placeholder="555088-001" />
+              <label for="product-sku">SKU / Style code</label>
+              <input id="product-sku" name="productSku" v-model="productForm.sku" type="text" placeholder="555088-001" />
+            </div>
+          </div>
+
+          <div v-if="currentBrandStat" class="market-intel">
+            <p class="intel-title">Market Intel · {{ resolvedBrand }}</p>
+            <div class="intel-row">
+              <span class="intel-label">Avg Price</span>
+              <span class="intel-val">${{ currentBrandStat.avgPrice }}</span>
+              <span v-if="sellerDeltaText" class="intel-delta" :class="sellerDeltaClass">{{ sellerDeltaText }}</span>
+            </div>
+            <div class="intel-row">
+              <span class="intel-label">Brand Sales</span>
+              <span class="intel-val">{{ fmtNum(currentBrandStat.totalOrders) }} orders</span>
+            </div>
+            <div class="intel-row">
+              <span class="intel-label">Top Category</span>
+              <span class="intel-val">{{ currentBrandStat.topCategory }}</span>
             </div>
           </div>
 
           <div class="form-section-label section-gap">Pricing &amp; condition</div>
           <div class="form-grid">
             <div class="field">
-              <label>Asking price</label>
+              <label for="product-price">Asking price</label>
               <div class="price-wrap">
                 <span class="price-prefix">$</span>
-                <input v-model="productForm.price" type="number" min="1" step="1" class="price-input" />
+                <input id="product-price" name="productPrice" v-model="productForm.price" type="number" min="1" step="1" class="price-input" />
               </div>
             </div>
             <div class="field">
@@ -937,6 +1002,8 @@ function listingImage(p: ProductDoc) {
                 ref="fileInputEl"
                 class="hidden-file-input"
                 type="file"
+                name="listingImages"
+                aria-label="Upload listing images"
                 accept="image/*"
                 multiple
                 @change="onFilesPicked"
@@ -960,8 +1027,10 @@ function listingImage(p: ProductDoc) {
             </div>
 
             <div class="field full">
-              <label>Image URL fallback (optional)</label>
+              <label for="image-url-fallback">Image URL fallback (optional)</label>
               <input
+                id="image-url-fallback"
+                name="imageUrlFallback"
                 v-model="productForm.imageUrl"
                 type="url"
                 placeholder="https://example.com/your-shoe.jpg"
@@ -1007,7 +1076,8 @@ function listingImage(p: ProductDoc) {
           <div class="form-section-label section-gap">Description</div>
           <div class="form-grid">
             <div class="field full">
-              <textarea v-model="productForm.description" rows="3" placeholder="Box included? Pickup location? Any flaws?" />
+              <label for="product-description">Listing description</label>
+              <textarea id="product-description" name="productDescription" v-model="productForm.description" rows="3" placeholder="Box included? Pickup location? Any flaws?" />
             </div>
           </div>
 
@@ -1099,7 +1169,7 @@ function listingImage(p: ProductDoc) {
 .head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .card {
-  border: 1px solid rgba(156, 255, 0, 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
   border-radius: 10px;
   padding: 18px;
   background: rgba(255, 255, 255, 0.02);
@@ -1139,7 +1209,7 @@ function listingImage(p: ProductDoc) {
 .field select {
   padding: 9px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(156, 255, 0, 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.1);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text);
   font-size: 0.9rem;
@@ -1150,9 +1220,41 @@ function listingImage(p: ProductDoc) {
 .field textarea:focus,
 .field select:focus {
   outline: none;
-  border-color: rgba(156, 255, 0, 0.35);
+  border-color: rgba(var(--accent-rgb), 0.35);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
 }
 .field textarea { resize: vertical; }
+.field-help {
+  margin: 2px 0 0;
+  color: color-mix(in srgb, var(--muted) 88%, white 12%);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.field select {
+  appearance: none;
+  color-scheme: dark;
+  background-image:
+    linear-gradient(45deg, transparent 50%, color-mix(in srgb, var(--muted) 76%, white 24%) 50%),
+    linear-gradient(135deg, color-mix(in srgb, var(--muted) 76%, white 24%) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 2px),
+    calc(100% - 13px) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 34px;
+}
+.field select:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.field select option {
+  background: var(--surface-1);
+  color: var(--text);
+}
+.field--preset {
+  position: relative;
+}
 
 .listing-layout {
   display: grid;
@@ -1171,6 +1273,17 @@ function listingImage(p: ProductDoc) {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 .section-gap { margin-top: 14px; }
+
+.market-intel { background: var(--surface-2, rgba(255,255,255,0.04)); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; }
+.intel-title  { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 8px; }
+.intel-row    { display: flex; gap: 12px; align-items: baseline; margin-bottom: 4px; font-size: 0.9rem; }
+.intel-label  { color: var(--muted); min-width: 90px; }
+.intel-val    { font-weight: 600; }
+.intel-delta  { font-size: 0.8rem; }
+.price--great-deal { color: var(--success); font-weight: 600; }
+.price--deal       { color: color-mix(in srgb, var(--success) 70%, transparent); }
+.price--premium    { color: #f5a623; }
+.price--high       { color: var(--error, #e55); }
 
 .form-grid {
   display: grid;
@@ -1198,24 +1311,24 @@ function listingImage(p: ProductDoc) {
   transition: border-color 0.15s, color 0.15s;
   white-space: nowrap;
 }
-.pill-btn:hover { border-color: rgba(156, 255, 0, 0.25); color: var(--text); }
+.pill-btn:hover { border-color: rgba(var(--accent-rgb), 0.25); color: var(--text); }
 .pill-btn.active {
-  border-color: rgba(156, 255, 0, 0.5);
+  border-color: rgba(var(--accent-rgb), 0.5);
   color: var(--text);
-  background: rgba(156, 255, 0, 0.06);
+  background: rgba(var(--accent-rgb), 0.06);
 }
 .pill-btn--sm { padding: 3px 9px; font-size: 0.75rem; }
 
 .price-wrap {
   display: flex;
   align-items: center;
-  border: 1px solid rgba(156, 255, 0, 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.1);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.03);
   overflow: hidden;
   transition: border-color 0.15s;
 }
-.price-wrap:focus-within { border-color: rgba(156, 255, 0, 0.35); }
+.price-wrap:focus-within { border-color: rgba(var(--accent-rgb), 0.35); }
 .price-prefix {
   padding: 9px 0 9px 12px;
   color: var(--accent);
@@ -1252,32 +1365,32 @@ function listingImage(p: ProductDoc) {
   transition: border-color 0.2s, color 0.2s, background 0.2s, box-shadow 0.2s;
 }
 .cond-btn:hover {
-  border-color: rgba(156, 255, 0, 0.3);
+  border-color: rgba(var(--accent-rgb), 0.3);
   color: var(--text);
-  background: rgba(156, 255, 0, 0.04);
+  background: rgba(var(--accent-rgb), 0.04);
 }
 .cond-btn.active {
   border-color: var(--accent);
   color: var(--accent);
-  background: rgba(156, 255, 0, 0.1);
-  box-shadow: 0 0 10px rgba(156, 255, 0, 0.12);
+  background: rgba(var(--accent-rgb), 0.1);
+  box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.12);
 }
 
 .media-stack { display: grid; gap: 12px; }
 .dropzone {
-  border: 2px dashed rgba(156, 255, 0, 0.25);
+  border: 2px dashed rgba(var(--accent-rgb), 0.25);
   border-radius: 14px;
   padding: 28px 20px;
-  background: rgba(156, 255, 0, 0.02);
+  background: rgba(var(--accent-rgb), 0.02);
   cursor: pointer;
   text-align: center;
   transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
 }
 .dropzone:hover,
 .dropzone.active {
-  border-color: rgba(156, 255, 0, 0.55);
-  background: rgba(156, 255, 0, 0.06);
-  box-shadow: 0 0 24px rgba(156, 255, 0, 0.08);
+  border-color: rgba(var(--accent-rgb), 0.55);
+  background: rgba(var(--accent-rgb), 0.06);
+  box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.08);
 }
 .drop-title {
   margin: 0;
@@ -1318,18 +1431,18 @@ function listingImage(p: ProductDoc) {
   gap: 10px;
 }
 .gallery-item {
-  border: 1px solid rgba(156, 255, 0, 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
   border-radius: 12px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.02);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .gallery-item:hover {
-  border-color: rgba(156, 255, 0, 0.25);
+  border-color: rgba(var(--accent-rgb), 0.25);
 }
 .gallery-item.cover {
-  border-color: rgba(156, 255, 0, 0.6);
-  box-shadow: 0 0 14px rgba(156, 255, 0, 0.15);
+  border-color: rgba(var(--accent-rgb), 0.6);
+  box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.15);
 }
 .gallery-img {
   width: 100%;
@@ -1358,7 +1471,7 @@ function listingImage(p: ProductDoc) {
   gap: 12px;
   margin-top: 18px;
   padding-top: 14px;
-  border-top: 1px solid rgba(156, 255, 0, 0.07);
+  border-top: 1px solid rgba(var(--accent-rgb), 0.07);
   flex-wrap: wrap;
 }
 .publish-note { margin: 0; color: var(--muted); font-size: 0.8rem; }
@@ -1373,18 +1486,18 @@ function listingImage(p: ProductDoc) {
   letter-spacing: 0.08em;
 }
 .preview-card {
-  border: 1px solid rgba(156, 255, 0, 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   border-radius: 14px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.02);
   backdrop-filter: blur(8px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(156, 255, 0, 0.06) inset;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(var(--accent-rgb), 0.06) inset;
   transition: box-shadow 0.25s;
   position: sticky;
   top: 80px;
 }
 .preview-card:hover {
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 20px rgba(156, 255, 0, 0.08);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 20px rgba(var(--accent-rgb), 0.08);
 }
 .preview-img-wrap { position: relative; overflow: hidden; }
 .preview-img {
@@ -1408,7 +1521,7 @@ function listingImage(p: ProductDoc) {
   color: var(--text);
   letter-spacing: 0.04em;
 }
-.preview-cond.ds { color: var(--accent); border: 1px solid rgba(156, 255, 0, 0.3); }
+.preview-cond.ds { color: var(--accent); border: 1px solid rgba(var(--accent-rgb), 0.3); }
 .preview-cond.new { color: #7ecfff; border: 1px solid rgba(126, 207, 255, 0.3); }
 .preview-cond.used { color: var(--muted); }
 .preview-body { padding: 14px 14px 16px; }
@@ -1426,14 +1539,14 @@ function listingImage(p: ProductDoc) {
   gap: 14px;
   align-items: center;
   padding: 12px 14px;
-  border: 1px solid rgba(156, 255, 0, 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.1);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.02);
   transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
 }
 .listing-row:hover {
-  border-color: rgba(156, 255, 0, 0.25);
-  background: rgba(156, 255, 0, 0.02);
+  border-color: rgba(var(--accent-rgb), 0.25);
+  background: rgba(var(--accent-rgb), 0.02);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 @media (max-width: 600px) {
@@ -1445,10 +1558,10 @@ function listingImage(p: ProductDoc) {
   height: 64px;
   border-radius: 10px;
   object-fit: cover;
-  border: 1px solid rgba(156, 255, 0, 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
   transition: border-color 0.2s;
 }
-.listing-row:hover .lr-img { border-color: rgba(156, 255, 0, 0.28); }
+.listing-row:hover .lr-img { border-color: rgba(var(--accent-rgb), 0.28); }
 .lr-meta { min-width: 0; }
 .lr-name { font-weight: 900; color: var(--text); font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lr-sub { font-size: 0.8rem; color: var(--muted); margin-top: 3px; }
@@ -1460,9 +1573,9 @@ function listingImage(p: ProductDoc) {
   font-weight: 800;
   padding: 3px 9px;
   border-radius: 6px;
-  border: 1px solid rgba(156, 255, 0, 0.3);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
   color: var(--accent);
-  background: rgba(156, 255, 0, 0.07);
+  background: rgba(var(--accent-rgb), 0.07);
   white-space: nowrap;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1473,7 +1586,7 @@ function listingImage(p: ProductDoc) {
 .btn {
   padding: 8px 16px;
   border-radius: 10px;
-  border: 1px solid rgba(156, 255, 0, 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -1484,7 +1597,7 @@ function listingImage(p: ProductDoc) {
   align-items: center;
   transition: border-color 0.15s, background 0.15s;
 }
-.btn:hover { border-color: rgba(156, 255, 0, 0.32); background: rgba(156, 255, 0, 0.04); }
+.btn:hover { border-color: rgba(var(--accent-rgb), 0.32); background: rgba(var(--accent-rgb), 0.04); }
 .btn.primary { background: var(--accent); border-color: transparent; color: #0b1205; }
 .btn.primary:hover { background: #b5ff33; }
 .btn.danger { border-color: rgba(255, 50, 50, 0.3); color: var(--danger); }
@@ -1502,4 +1615,3 @@ function listingImage(p: ProductDoc) {
   .form-actions .btn { flex: 1; justify-content: center; }
 }
 </style>
-

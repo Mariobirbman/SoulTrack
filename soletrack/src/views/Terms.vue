@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="terms-container">
     <h1>Terms of Service &amp; Privacy Policy</h1>
     <p class="last-updated">Last updated: April 14, 2026</p>
@@ -175,7 +175,7 @@ h2 {
   font-size: 1.1rem;
   color: var(--accent);
   margin-bottom: 10px;
-  border-bottom: 1px solid rgba(156, 255, 0, 0.12);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.12);
   padding-bottom: 6px;
 }
 
@@ -205,8 +205,8 @@ li {
 }
 
 code {
-  background: rgba(156, 255, 0, 0.08);
-  border: 1px solid rgba(156, 255, 0, 0.15);
+  background: rgba(var(--accent-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   border-radius: 4px;
   padding: 1px 6px;
   font-size: 0.85rem;

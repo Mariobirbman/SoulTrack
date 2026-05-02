@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { addDoc, collection, doc, getDoc, serverTimestamp } from 'firebase/firestore'
@@ -289,12 +289,12 @@ async function placeOrders() {
 
 .notice { border-radius: 12px; padding: 10px 12px; border: 1px solid; margin: 10px 0; }
 .notice.error { border-color: rgba(255,50,50,0.35); color: var(--danger); background: rgba(255,50,50,0.06); }
-.notice.muted { border-color: rgba(156, 255, 0, 0.12); color: var(--muted); background: rgba(255,255,255,0.02); }
+.notice.muted { border-color: rgba(var(--accent-rgb), 0.12); color: var(--muted); background: rgba(255,255,255,0.02); }
 
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
 @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
 
-.panel { border: 1px solid rgba(156, 255, 0, 0.12); border-radius: 16px; padding: 16px; background: rgba(255,255,255,0.02); }
+.panel { border: 1px solid rgba(var(--accent-rgb), 0.12); border-radius: 16px; padding: 16px; background: rgba(255,255,255,0.02); }
 .panel-title { margin: 0 0 12px; color: var(--text); font-size: 1.05rem; }
 
 .form { display: grid; gap: 10px; }
@@ -326,7 +326,7 @@ async function placeOrders() {
 .btn {
   padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(156, 255, 0, 0.15);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -348,7 +348,7 @@ async function placeOrders() {
   height: 56px;
   border-radius: 50%;
   border: 2px solid var(--accent);
-  background: rgba(156, 255, 0, 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
   color: var(--accent);
   font-size: 1.6rem;
   line-height: 52px;

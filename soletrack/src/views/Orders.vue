@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { useRoute } from 'vue-router'
@@ -175,14 +175,14 @@ const grouped = computed(() => {
 
 .notice { border-radius: 12px; padding: 10px 12px; border: 1px solid; margin: 10px 0; }
 .notice.error { border-color: rgba(255,50,50,0.35); color: var(--danger); background: rgba(255,50,50,0.06); }
-.notice.muted { border-color: rgba(156, 255, 0, 0.12); color: var(--muted); background: rgba(255,255,255,0.02); }
+.notice.muted { border-color: rgba(var(--accent-rgb), 0.12); color: var(--muted); background: rgba(255,255,255,0.02); }
 .empty { padding: 40px 0; text-align: center; }
 .muted { color: var(--muted); }
 .small { font-size: 0.85rem; }
 
 .sessions { display: grid; gap: 12px; }
-.session { border: 1px solid rgba(156, 255, 0, 0.12); border-radius: 16px; padding: 14px; background: rgba(255,255,255,0.02); }
-.session.highlight { border-color: rgba(156, 255, 0, 0.35); box-shadow: 0 0 0 1px rgba(156, 255, 0, 0.12) inset; }
+.session { border: 1px solid rgba(var(--accent-rgb), 0.12); border-radius: 16px; padding: 14px; background: rgba(255,255,255,0.02); }
+.session.highlight { border-color: rgba(var(--accent-rgb), 0.35); box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.12) inset; }
 .session-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
 .kicker { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.7rem; color: var(--muted); }
 .checkout-id { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--text); font-weight: 900; }
@@ -199,14 +199,14 @@ const grouped = computed(() => {
   background: rgba(255,255,255,0.02);
   text-decoration: none;
 }
-.order:hover { border-color: rgba(156, 255, 0, 0.22); }
+.order:hover { border-color: rgba(var(--accent-rgb), 0.22); }
 .vendor { color: var(--text); font-weight: 900; }
 .right { text-align: right; font-size: 0.85rem; }
 
 .btn {
   padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(156, 255, 0, 0.15);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   background: transparent;
   color: var(--text);
   cursor: pointer;

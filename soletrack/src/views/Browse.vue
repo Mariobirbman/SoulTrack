@@ -1,9 +1,12 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { collection, onSnapshot, query } from 'firebase/firestore'
 import { db, firebaseConfigured } from '@/lib/firebase'
 import { useCart } from '@/lib/cart'
+import { useAuth } from '@/lib/auth'
+import { getDelta, loadBrandStats } from '@/lib/useBrandStats'
+import { priceColorClass } from '@/lib/marketIntel'
 import type { DemoProduct } from '@/lib/demoMarketplace'
 import { getOrSeedDemoProducts } from '@/lib/demoStore'
 
@@ -15,13 +18,16 @@ const loading = ref(false)
 const loadError = ref('')
 
 let stopProductsListener: (() => void) | null = null
-onMounted(() => {
+onMounted(async () => {
+  try {
+    await loadBrandStats()
+  } catch {}
   loading.value = true
   if (!firebaseConfigured || !db) {
     // Demo mode: include active, unsold listings so newly posted demo items appear immediately.
     products.value = getOrSeedDemoProducts().filter((p: any) => {
       const status = String(p.status ?? 'active')
-      return status !== 'sold' && status !== 'rejected' && p.active !== false
+      return (status === 'approved' || status === 'active') && p.active !== false
     }) as any
     loadError.value = ''
     loading.value = false
@@ -40,8 +46,7 @@ onMounted(() => {
             typeof (p as any).vendorUid === 'string'
             && (p as any).vendorUid.length > 0
             && (p as any).active !== false
-            && status !== 'sold'
-            && status !== 'rejected'
+            && (status === 'approved' || status === 'active')
           )
         })
       loadError.value = ''
@@ -102,6 +107,7 @@ const filtered = computed(() => {
 })
 
 const watchlist = ref<string[]>([])
+const priceClassMap = ref<Record<string, string>>({})
 
 function toggleWatchlist(id: string) {
   if (watchlist.value.includes(id)) {
@@ -136,9 +142,30 @@ function profitMargin(p: { price: number; retailPrice?: number }) {
   return Math.round(((p.price - p.retailPrice) / p.retailPrice) * 100)
 }
 
+async function refreshPriceClasses(items: Product[]) {
+  const updates = await Promise.all(
+    items.map(async (p) => {
+      const delta = await getDelta(p.price, p.brand)
+      return [p.id, priceColorClass(delta)] as const
+    }),
+  )
+  priceClassMap.value = Object.fromEntries(updates)
+}
+
+function priceClassForProduct(p: Product) {
+  return priceClassMap.value[p.id] ?? ''
+}
+
 const { add: addToCart } = useCart()
+const { user } = useAuth()
 const cartToast = ref('')
 let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+/** True when the logged-in user owns this listing - show Edit instead of Add to Cart */
+function isOwnProduct(p: Product): boolean {
+  if (!user.value || !(p as any).vendorUid) return false
+  return user.value.uid === (p as any).vendorUid
+}
 
 function addProductToCart(p: Product) {
   addToCart({
@@ -154,6 +181,8 @@ function addProductToCart(p: Product) {
   if (toastTimer) clearTimeout(toastTimer)
   toastTimer = setTimeout(() => { cartToast.value = '' }, 2500)
 }
+
+watch(filtered, (items) => { void refreshPriceClasses(items) }, { immediate: true })
 </script>
 
 <template>
@@ -172,21 +201,22 @@ function addProductToCart(p: Product) {
       <input
         id="browse-search"
         name="browseSearch"
+        aria-label="Search products"
         v-model="searchQuery"
         class="search-input"
         type="text"
         placeholder="Search shoes, brands, colorways..."
       />
-      <select id="browse-brand" name="browseBrand" v-model="selectedBrand" class="filter-select">
+      <select id="browse-brand" name="browseBrand" aria-label="Filter by brand" v-model="selectedBrand" class="filter-select">
         <option v-for="b in brands" :key="b">{{ b }}</option>
       </select>
-      <select id="browse-condition" name="browseCondition" v-model="selectedCondition" class="filter-select">
+      <select id="browse-condition" name="browseCondition" aria-label="Filter by condition" v-model="selectedCondition" class="filter-select">
         <option v-for="c in conditions" :key="c">{{ c }}</option>
       </select>
-      <select id="browse-platform" name="browsePlatform" v-model="selectedPlatform" class="filter-select">
+      <select id="browse-platform" name="browsePlatform" aria-label="Filter by platform" v-model="selectedPlatform" class="filter-select">
         <option v-for="pl in platformOptions" :key="pl">{{ pl }}</option>
       </select>
-      <select id="browse-sort" name="browseSort" v-model="sortBy" class="filter-select">
+      <select id="browse-sort" name="browseSort" aria-label="Sort products" v-model="sortBy" class="filter-select">
         <option value="price-asc">Price: Low to High</option>
         <option value="price-desc">Price: High to Low</option>
         <option value="name">Name A-Z</option>
@@ -202,7 +232,7 @@ function addProductToCart(p: Product) {
     <div class="product-grid" v-if="filtered.length">
       <div class="product-card" v-for="p in filtered" :key="p.id">
         <div class="product-img-wrap">
-          <img :src="productImage(p)" :alt="p.name" class="product-img" />
+          <img :src="productImage(p)" :alt="p.name" class="product-img" loading="lazy" />
           <button
             class="watchlist-btn"
             :class="{ watched: isWatched(p.id) }"
@@ -239,7 +269,7 @@ function addProductToCart(p: Product) {
           <div class="price-row">
             <div>
               <p class="price-label">Ask Price</p>
-              <p class="product-price">${{ p.price }}</p>
+              <p class="product-price" :class="priceClassForProduct(p)">${{ p.price }}</p>
             </div>
             <div v-if="p.retailPrice">
               <p class="price-label">Retail</p>
@@ -262,7 +292,9 @@ function addProductToCart(p: Product) {
           </div>
 
           <div class="product-footer">
-            <button class="btn primary btn-sm" @click="addProductToCart(p)">Add to cart</button>
+            <!-- Seller sees Edit instead of Add to cart on their own listings -->
+            <router-link v-if="isOwnProduct(p)" to="/sell" class="btn own-btn btn-sm">&#x270F;&#xFE0F; Edit</router-link>
+            <button v-else class="btn primary btn-sm" @click="addProductToCart(p)">Add to cart</button>
             <router-link :to="`/item/${p.id}`" class="btn btn-sm">View details</router-link>
           </div>
         </div>
@@ -323,6 +355,26 @@ function addProductToCart(p: Product) {
   color: var(--text);
   font-size: 0.9rem;
   cursor: pointer;
+  appearance: none;
+  color-scheme: dark;
+  background-image:
+    linear-gradient(45deg, transparent 50%, color-mix(in srgb, var(--muted) 76%, white 24%) 50%),
+    linear-gradient(135deg, color-mix(in srgb, var(--muted) 76%, white 24%) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) calc(50% - 2px),
+    calc(100% - 11px) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 34px;
+}
+.filter-select:focus {
+  outline: none;
+  border-color: rgba(var(--accent-rgb), 0.4);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.14);
+}
+.filter-select option {
+  background: var(--surface-1);
+  color: var(--text);
 }
 
 .results-count { color: var(--muted); font-size: 0.85rem; margin: 0 0 20px; }
@@ -335,14 +387,14 @@ function addProductToCart(p: Product) {
 
 .product-card {
   background: var(--card);
-  border: 1px solid rgba(156, 255, 0, 0.12);
+  border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
-  transition: border-color 0.15s;
+  transition: background 0.15s;
 }
 
 .product-card:hover {
-  border-color: rgba(156, 255, 0, 0.28);
+  background: var(--surface-2);
 }
 
 .product-img-wrap {
@@ -366,14 +418,19 @@ function addProductToCart(p: Product) {
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: var(--muted);
   border-radius: 6px;
-  padding: 3px 7px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 0.72rem;
   font-weight: 700;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
 }
 
-.watchlist-btn.watched { color: var(--accent); border-color: rgba(156, 255, 0, 0.3); }
+.watchlist-btn.watched { color: var(--accent); border-color: rgba(var(--accent-rgb), 0.3); }
 
 .condition-badge {
   position: absolute;
@@ -416,7 +473,7 @@ function addProductToCart(p: Product) {
 .product-platform-tag {
   font-size: 0.7rem;
   color: var(--accent);
-  border: 1px solid rgba(156, 255, 0, 0.3);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
   border-radius: 6px;
   padding: 2px 7px;
   font-weight: 600;
@@ -435,8 +492,7 @@ function addProductToCart(p: Product) {
 .meta-item {
   font-size: 0.72rem;
   color: var(--muted);
-  background: rgba(156, 255, 0, 0.05);
-  border: 1px solid rgba(156, 255, 0, 0.1);
+  background: rgba(255, 255, 255, 0.04);
   padding: 3px 8px;
   border-radius: 6px;
 }
@@ -447,8 +503,12 @@ function addProductToCart(p: Product) {
   margin-bottom: 10px;
 }
 
-.price-label { margin: 0 0 2px; font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.price-label { margin: 0 0 2px; font-size: 0.72rem; color: var(--muted); }
 .product-price { margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--accent); }
+.price--great-deal { color: var(--success); font-weight: 600; }
+.price--deal       { color: color-mix(in srgb, var(--success) 70%, transparent); }
+.price--premium    { color: #f5a623; }
+.price--high       { color: var(--danger); }
 .retail-price { margin: 0; font-size: 1rem; font-weight: 600; color: var(--muted); text-decoration: line-through; }
 
 .seller-row { margin-bottom: 10px; }
@@ -475,9 +535,9 @@ function addProductToCart(p: Product) {
   line-height: 1.5;
   margin-bottom: 10px;
   padding: 10px;
-  background: rgba(156, 255, 0, 0.03);
+  background: rgba(var(--accent-rgb), 0.03);
   border-radius: 8px;
-  border: 1px solid rgba(156, 255, 0, 0.08);
+  border: 1px solid rgba(var(--accent-rgb), 0.08);
 }
 .product-desc p { margin: 0; }
 
@@ -497,6 +557,10 @@ function addProductToCart(p: Product) {
 
 .btn.primary { background: var(--accent); border-color: transparent; color: #0b1205; }
 .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+.own-btn { color: var(--accent); border-color: rgba(var(--accent-rgb), 0.35); background: rgba(var(--accent-rgb), 0.06); text-decoration: none; }
+.own-btn:hover { background: rgba(var(--accent-rgb), 0.14); border-color: rgba(var(--accent-rgb), 0.6); }
+.own-btn { color: var(--accent); border-color: rgba(var(--accent-rgb), 0.35); background: rgba(var(--accent-rgb), 0.06); text-decoration: none; }
+.own-btn:hover { background: rgba(var(--accent-rgb), 0.14); border-color: rgba(var(--accent-rgb), 0.6); }
 
 .empty-state { text-align: center; padding: 64px 24px; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 16px; }
 .empty-icon { font-size: 3rem; margin: 0; }
@@ -507,8 +571,8 @@ function addProductToCart(p: Product) {
   left: 50%;
   transform: translateX(-50%);
   background: var(--card);
-  border: 1px solid rgba(156, 255, 0, 0.3);
-  border-radius: 999px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   padding: 10px 20px;
   display: flex;
   align-items: center;
@@ -516,7 +580,7 @@ function addProductToCart(p: Product) {
   color: var(--accent);
   font-weight: 600;
   font-size: 0.9rem;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   z-index: 100;
 }
 
@@ -535,10 +599,10 @@ function addProductToCart(p: Product) {
   color: #0b1205;
   font-weight: 700;
   padding: 10px 22px;
-  border-radius: 999px;
+  border-radius: 8px;
   font-size: 0.9rem;
   z-index: 200;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
   white-space: nowrap;
 }
 

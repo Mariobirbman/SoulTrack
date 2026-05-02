@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query } from 'firebase/firestore'
@@ -8,6 +8,7 @@ import { auth, db, demoMode, firebaseConfigured } from '@/lib/firebase'
 import { disableDemoMode } from '@/lib/demo'
 import { upsertUserProfile } from '@/lib/profile'
 import { deleteDemoSale, getOrSeedDemoSales } from '@/lib/demoStore'
+import { isAuthBypassEnabled } from '@/lib/runtimeFlags'
 
 const router = useRouter()
 
@@ -29,6 +30,7 @@ const { user, ready } = useAuth()
 const loading = ref(true)
 const formError = ref('')
 const sales = ref<Sale[]>([])
+const authBypass = isAuthBypassEnabled()
 
 let stopSalesListener: (() => void) | null = null
 
@@ -71,8 +73,13 @@ onMounted(() => {
       return
     }
 
-    if (!user.value) {
+    if (!user.value && !authBypass) {
       router.push('/login')
+      return
+    }
+    if (!user.value) {
+      loading.value = false
+      formError.value = 'Auth bypass is on. Sales history requires a signed-in Firebase user.'
       return
     }
 
@@ -102,10 +109,11 @@ async function deleteSale(id: string) {
     )
     return
   }
-  if (!user.value) {
+  if (!user.value && !authBypass) {
     router.push('/login')
     return
   }
+  if (!user.value) return
   try {
     if (!db) return
     await deleteDoc(doc(db, 'users', user.value.uid, 'sales', id))
@@ -256,7 +264,7 @@ async function logout() {
 
 .btn-logout {
   background: transparent;
-  border: 1px solid rgba(156, 255, 0, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   color: var(--muted);
   padding: 8px 16px;
   border-radius: 8px;
@@ -274,8 +282,8 @@ async function logout() {
 }
 
 .stat-card {
-  background: linear-gradient(160deg, rgba(156, 255, 0, 0.05) 0%, var(--card) 60%);
-  border: 1px solid rgba(156, 255, 0, 0.15);
+  background: linear-gradient(160deg, rgba(var(--accent-rgb), 0.05) 0%, var(--card) 60%);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   border-top: 2px solid var(--accent);
   border-radius: 12px;
   padding: 20px 24px;
@@ -305,7 +313,7 @@ async function logout() {
 .section-note { color: var(--muted); font-size: 0.82rem; }
 .error { color: var(--danger); margin: 0 0 12px; font-size: 0.9rem; }
 
-.sales-table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid rgba(156, 255, 0, 0.12); }
+.sales-table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid rgba(var(--accent-rgb), 0.12); }
 .sales-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .sales-table th {
   background: var(--card);
@@ -315,10 +323,10 @@ async function logout() {
   letter-spacing: 0.05em;
   padding: 12px 16px;
   text-align: left;
-  border-bottom: 1px solid rgba(156, 255, 0, 0.08);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.08);
 }
 .sales-table td { padding: 12px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); color: var(--text); }
-.sales-table tbody tr:hover { background: rgba(156, 255, 0, 0.03); }
+.sales-table tbody tr:hover { background: rgba(var(--accent-rgb), 0.03); }
 .td-shoe { font-weight: 800; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .td-source { white-space: nowrap; }
 .td-profit.pos { color: var(--success); font-weight: 900; }

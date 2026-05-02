@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from 'vue'
 import { useCart } from '@/lib/cart'
 import { useAuth } from '@/lib/auth'
@@ -86,7 +86,7 @@ const checkoutReady = computed(() => canCheckout.value && hasItems.value)
 .grid { display: grid; grid-template-columns: 1fr 320px; gap: 16px; align-items: start; }
 @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
 
-.items { border: 1px solid rgba(156, 255, 0, 0.12); border-radius: 16px; overflow: hidden; }
+.items { border: 1px solid rgba(var(--accent-rgb), 0.12); border-radius: 16px; overflow: hidden; }
 .row {
   display: grid;
   grid-template-columns: 76px 1fr 110px 120px 40px;
@@ -109,7 +109,7 @@ const checkoutReady = computed(() => canCheckout.value && hasItems.value)
   .line { display: none; }
   .remove { grid-column: 3; grid-row: 1; }
 }
-.img { width: 76px; height: 56px; object-fit: cover; border-radius: 12px; border: 1px solid rgba(156, 255, 0, 0.10); }
+.img { width: 76px; height: 56px; object-fit: cover; border-radius: 12px; border: 1px solid rgba(var(--accent-rgb), 0.10); }
 .meta { min-width: 0; }
 .name { color: var(--text); font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .price { font-size: 0.85rem; margin-top: 2px; }
@@ -126,12 +126,12 @@ const checkoutReady = computed(() => canCheckout.value && hasItems.value)
 .remove { border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 1.1rem; }
 .remove:hover { color: var(--danger); }
 
-.summary { border: 1px solid rgba(156, 255, 0, 0.12); border-radius: 16px; padding: 16px; background: rgba(255,255,255,0.02); }
+.summary { border: 1px solid rgba(var(--accent-rgb), 0.12); border-radius: 16px; padding: 16px; background: rgba(255,255,255,0.02); }
 .sum-title { margin: 0 0 12px; color: var(--text); font-size: 1.1rem; }
 .sum-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
 .sum-note { font-size: 0.85rem; margin: 12px 0 14px; }
 
-.btn { padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(156, 255, 0, 0.15); background: transparent; color: var(--text); cursor: pointer; font-weight: 900; }
+.btn { padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(var(--accent-rgb), 0.15); background: transparent; color: var(--text); cursor: pointer; font-weight: 900; }
 .btn.primary { background: var(--accent); border-color: transparent; color: #0b1205; width: 100%; }
 .btn.danger { border-color: rgba(255, 50, 50, 0.35); color: var(--danger); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }

@@ -1,19 +1,25 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { doc, getDoc } from 'firebase/firestore'
 import { db, firebaseConfigured } from '@/lib/firebase'
 import { useCart } from '@/lib/cart'
+import { useAuth } from '@/lib/auth'
 import { demoProducts } from '@/lib/demoMarketplace'
 import { getOrSeedDemoProducts } from '@/lib/demoStore'
+import { getBrandStat, getDelta, type BrandStat } from '@/lib/useBrandStats'
+import { deltaLabel as formatDeltaLabel, priceColorClass } from '@/lib/marketIntel'
 
 const route = useRoute()
 const { add: addToCart } = useCart()
+const { user } = useAuth()
 
 const product = ref<any>(null)
 const loading = ref(true)
 const error = ref('')
 const cartToast = ref('')
+const marketStat = ref<BrandStat | null>(null)
+const marketDelta = ref<number | null>(null)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
 const conditionColor: Record<string, string> = {
@@ -36,6 +42,12 @@ const margin = computed(() => {
   return Math.round(((product.value.price - product.value.retailPrice) / product.value.retailPrice) * 100)
 })
 
+/** True when the logged-in user owns this listing — they should edit, not buy */
+const isOwnListing = computed(() => {
+  if (!user.value || !product.value?.vendorUid) return false
+  return user.value.uid === product.value.vendorUid
+})
+
 const normalizedStatus = computed(() => {
   const raw = String(product.value?.status ?? 'active').toLowerCase()
   if (raw === 'sold') return 'sold'
@@ -44,38 +56,58 @@ const normalizedStatus = computed(() => {
 })
 
 const statusLabel = computed(() => (normalizedStatus.value === 'sold' ? 'Sold' : normalizedStatus.value === 'rejected' ? 'Unavailable' : 'Active'))
+const deltaLabel = computed(() => (marketDelta.value === null ? '' : formatDeltaLabel(marketDelta.value)))
+const deltaClass = computed(() => (marketDelta.value === null ? '' : priceColorClass(marketDelta.value)))
 
-onMounted(async () => {
-  const id = route.params.id as string
+// Watch the route param so the product reloads on every navigation —
+// including the first render — without needing a hard refresh.
+watch(
+  () => route.params.id,
+  async (id) => {
+    if (!id) return
+    const idStr = String(id)
 
-  // Check demo products first (demo store + fixed demos)
-  const allDemo = [...getOrSeedDemoProducts(), ...demoProducts]
-  const demoHit = allDemo.find((p) => p.id === id)
-  if (demoHit) {
-    product.value = demoHit
-    loading.value = false
-    return
-  }
+    // Reset state for each load
+    product.value = null
+    marketStat.value = null
+    marketDelta.value = null
+    error.value = ''
+    loading.value = true
 
-  if (!firebaseConfigured || !db) {
-    error.value = 'Product not found.'
-    loading.value = false
-    return
-  }
-
-  try {
-    const snap = await getDoc(doc(db, 'products', id))
-    if (snap.exists()) {
-      product.value = { id: snap.id, ...snap.data() }
-    } else {
-      error.value = 'Product not found.'
+    // Check demo products first (demo store + fixed demos)
+    const allDemo = [...getOrSeedDemoProducts(), ...demoProducts]
+    const demoHit = allDemo.find((p) => p.id === idStr)
+    if (demoHit) {
+      product.value = demoHit
+      marketStat.value = await getBrandStat(String(demoHit.brand ?? ''))
+      marketDelta.value = await getDelta(Number(demoHit.price ?? 0), String(demoHit.brand ?? ''))
+      loading.value = false
+      return
     }
-  } catch {
-    error.value = 'Could not load product. Try again later.'
-  } finally {
-    loading.value = false
-  }
-})
+
+    if (!firebaseConfigured || !db) {
+      error.value = 'Product not found.'
+      loading.value = false
+      return
+    }
+
+    try {
+      const snap = await getDoc(doc(db, 'products', idStr))
+      if (snap.exists()) {
+        product.value = { id: snap.id, ...snap.data() }
+        marketStat.value = await getBrandStat(String(product.value.brand ?? ''))
+        marketDelta.value = await getDelta(Number(product.value.price ?? 0), String(product.value.brand ?? ''))
+      } else {
+        error.value = 'Product not found.'
+      }
+    } catch {
+      error.value = 'Could not load product. Try again later.'
+    } finally {
+      loading.value = false
+    }
+  },
+  { immediate: true },
+)
 
 function handleAddToCart() {
   if (!product.value) return
@@ -149,6 +181,21 @@ function handleAddToCart() {
             <span v-if="product.soldCount" class="meta-pill">{{ product.soldCount }} sold</span>
           </div>
 
+          <div v-if="marketStat" class="market-intel">
+            <p class="intel-title">Market Intel · {{ product.brand }}</p>
+            <div class="intel-row">
+              <span class="intel-label">Avg Price</span>
+              <span class="intel-val">${{ marketStat.avgPrice }}</span>
+              <span v-if="marketDelta !== null" class="intel-delta" :class="deltaClass">
+                {{ deltaLabel }}
+              </span>
+            </div>
+            <div class="intel-row">
+              <span class="intel-label">Brand Sales</span>
+              <span class="intel-val">{{ marketStat.totalOrders.toLocaleString() }} orders</span>
+            </div>
+          </div>
+
           <!-- Price block -->
           <div class="price-block">
             <div>
@@ -182,20 +229,31 @@ function handleAddToCart() {
 
           <!-- Actions -->
           <div class="actions">
-            <button
-              class="btn primary"
-              :disabled="normalizedStatus === 'sold'"
-              @click="handleAddToCart"
-            >
-              {{ normalizedStatus === 'sold' ? 'Sold Out' : 'Add to Cart' }}
-            </button>
-            <router-link
-              v-if="product.vendorUid"
-              :to="`/vendor/${product.vendorUid}`"
-              class="btn"
-            >
-              View Vendor
-            </router-link>
+            <!-- Seller viewing their own listing: go to edit, not cart -->
+            <template v-if="isOwnListing">
+              <router-link to="/sell" class="btn own-listing-btn">
+                ✏️ Edit Listing
+              </router-link>
+              <span class="own-listing-note">This is your listing</span>
+            </template>
+
+            <!-- Buyer / visitor: normal add-to-cart -->
+            <template v-else>
+              <button
+                class="btn primary"
+                :disabled="normalizedStatus === 'sold'"
+                @click="handleAddToCart"
+              >
+                {{ normalizedStatus === 'sold' ? 'Sold Out' : 'Add to Cart' }}
+              </button>
+              <router-link
+                v-if="product.vendorUid"
+                :to="`/vendor/${product.vendorUid}`"
+                class="btn"
+              >
+                View Vendor
+              </router-link>
+            </template>
           </div>
         </div>
       </div>
@@ -240,10 +298,10 @@ function handleAddToCart() {
 .img-col {}
 .img-wrap {
   position: relative;
-  border-radius: 18px;
+  border-radius: 10px;
   overflow: hidden;
   aspect-ratio: 4/3;
-  border: 1px solid rgba(156, 255, 0, 0.15);
+  border: 1px solid var(--border);
 }
 .product-img {
   width: 100%;
@@ -262,7 +320,6 @@ function handleAddToCart() {
   border-radius: 7px;
   border: 1px solid;
   background: rgba(6, 15, 7, 0.75);
-  letter-spacing: 0.05em;
 }
 .margin-badge {
   position: absolute;
@@ -283,8 +340,7 @@ function handleAddToCart() {
   margin: 0 0 4px;
   font-size: 0.75rem;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-weight: 600;
 }
 .product-name {
   margin: 0 0 4px;
@@ -298,112 +354,33 @@ function handleAddToCart() {
   font-size: 0.9rem;
   color: var(--muted);
 }
+.market-intel { background: var(--surface-2, rgba(255,255,255,0.04)); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; }
+.intel-title  { font-size: 0.72rem; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
+.intel-row    { display: flex; gap: 12px; align-items: baseline; margin-bottom: 4px; font-size: 0.9rem; }
+.intel-label  { color: var(--muted); min-width: 90px; }
+.intel-val    { font-weight: 600; }
+.intel-delta  { font-size: 0.8rem; }
+.price--great-deal { color: var(--success); font-weight: 600; }
+.price--deal       { color: color-mix(in srgb, var(--success) 70%, transparent); }
+.price--premium    { color: #f5a623; }
+.price--high       { color: var(--danger); }
 
 .status-badge {
   display: inline-block;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
   padding: 3px 10px;
   border-radius: 6px;
   margin-bottom: 16px;
 }
-.status-badge.active    { background: rgba(156,255,0,0.12); color: var(--accent); border: 1px solid rgba(156,255,0,0.3); }
+.status-badge.active    { background: rgba(var(--accent-rgb), 0.12); color: var(--accent); border: 1px solid rgba(var(--accent-rgb), 0.3); }
 .status-badge.sold      { background: rgba(255,80,80,0.1);  color: var(--danger); border: 1px solid rgba(255,80,80,0.3); }
 .status-badge.rejected  { background: rgba(255,80,80,0.1);  color: var(--danger); border: 1px solid rgba(255,80,80,0.3); }
 
-.meta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 20px;
-}
-.meta-pill {
-  font-size: 0.75rem;
-  color: var(--muted);
-  background: rgba(156, 255, 0, 0.05);
-  border: 1px solid rgba(156, 255, 0, 0.12);
-  padding: 4px 10px;
-  border-radius: 7px;
-}
-
-.price-block {
-  display: flex;
-  gap: 32px;
-  align-items: baseline;
-  margin-bottom: 24px;
-  padding: 16px;
-  background: rgba(156, 255, 0, 0.04);
-  border: 1px solid rgba(156, 255, 0, 0.12);
-  border-radius: 12px;
-}
-.price-label {
-  margin: 0 0 3px;
-  font-size: 0.68rem;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-}
-.price {
-  margin: 0;
-  font-size: 2rem;
-  font-weight: 900;
-  color: var(--accent);
-}
-.retail {
-  margin: 0;
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--muted);
-  text-decoration: line-through;
-}
-
-.section-label {
-  margin: 0 0 6px;
-  font-size: 0.72rem;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-}
-
-.description {
-  margin-bottom: 20px;
-  padding: 14px;
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(156,255,0,0.08);
-  border-radius: 10px;
-  font-size: 0.9rem;
-  color: var(--muted);
-  line-height: 1.6;
-}
-.description p { margin: 0; }
-
-.seller-block {
-  margin-bottom: 24px;
-}
-.seller-name {
-  margin: 0;
-  font-size: 0.92rem;
-  color: var(--muted);
-}
-.seller-link {
-  color: var(--accent);
-  font-weight: 800;
-  text-decoration: none;
-}
-.seller-link:hover { text-decoration: underline; text-underline-offset: 2px; }
-
-.actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
 .btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 12px 24px;
+  padding: 10px 22px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: transparent;
@@ -425,7 +402,7 @@ function handleAddToCart() {
   cursor: not-allowed;
   opacity: 0.6;
 }
-.btn:not(.primary):hover { border-color: rgba(156,255,0,0.4); }
+.btn:not(.primary):hover { background: rgba(255,255,255,0.04); }
 
 /* Toast */
 .cart-toast {
@@ -437,10 +414,10 @@ function handleAddToCart() {
   color: #0b1205;
   font-weight: 700;
   padding: 10px 22px;
-  border-radius: 999px;
+  border-radius: 8px;
   font-size: 0.9rem;
   z-index: 200;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
   white-space: nowrap;
 }
 .toast-enter-active, .toast-leave-active { transition: opacity 0.25s, transform 0.25s; }

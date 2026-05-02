@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import StickyScrollGallery from '@/components/StickyScrollGallery.vue'
@@ -225,8 +225,8 @@ function submitSearch() {
   font-weight: 800;
   letter-spacing: 0.14em;
   color: var(--accent);
-  border: 1px solid rgba(156, 255, 0, 0.25);
-  background: rgba(156, 255, 0, 0.06);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
+  background: rgba(var(--accent-rgb), 0.06);
   padding: 5px 12px;
   border-radius: 999px;
   margin-bottom: 22px;
@@ -275,7 +275,7 @@ function submitSearch() {
   row-gap: 12px;
   margin-bottom: 28px;
   padding: 14px 18px;
-  border: 1px solid rgba(156, 255, 0, 0.14);
+  border: 1px solid rgba(var(--accent-rgb), 0.14);
   border-radius: 14px;
   background: rgba(7, 13, 9, 0.7);
   backdrop-filter: blur(10px);
@@ -302,7 +302,7 @@ function submitSearch() {
 .stat-sep {
   width: 1px;
   height: 32px;
-  background: rgba(156, 255, 0, 0.12);
+  background: rgba(var(--accent-rgb), 0.12);
   flex-shrink: 0;
 }
 
@@ -314,7 +314,7 @@ function submitSearch() {
   width: 100%;
   max-width: 540px;
   margin-bottom: 24px;
-  border: 1px solid rgba(156, 255, 0, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   border-radius: 14px;
   overflow: hidden;
   background: rgba(13, 22, 16, 0.9);
@@ -376,8 +376,8 @@ function submitSearch() {
   align-items: center;
   padding: 13px 22px;
   border-radius: 12px;
-  border: 1px solid rgba(156, 255, 0, 0.25);
-  background: rgba(156, 255, 0, 0.04);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
+  background: rgba(var(--accent-rgb), 0.04);
   color: var(--text);
   font-weight: 700;
   font-size: 0.95rem;
@@ -385,8 +385,8 @@ function submitSearch() {
   transition: border-color 0.2s, background 0.2s;
 }
 .cta-ghost:hover {
-  border-color: rgba(156, 255, 0, 0.5);
-  background: rgba(156, 255, 0, 0.08);
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: rgba(var(--accent-rgb), 0.08);
   color: var(--text);
 }
 
@@ -425,7 +425,7 @@ function submitSearch() {
 .features {
   padding: 64px 0 72px;
   background: var(--bg);
-  border-top: 1px solid rgba(156, 255, 0, 0.07);
+  border-top: 1px solid rgba(var(--accent-rgb), 0.07);
 }
 .features-grid {
   display: grid;
@@ -441,8 +441,8 @@ function submitSearch() {
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: rgba(156, 255, 0, 0.07);
-  border: 1px solid rgba(156, 255, 0, 0.15);
+  background: rgba(var(--accent-rgb), 0.07);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   display: flex;
   align-items: center;
   justify-content: center;

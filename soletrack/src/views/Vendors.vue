@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import { collection, onSnapshot, query } from 'firebase/firestore'
 import { db, demoMode, firebaseConfigured } from '@/lib/firebase'
@@ -397,8 +397,8 @@ const avgRating = computed(() => {
 }
 
 .vstat {
-  background: linear-gradient(160deg, rgba(156, 255, 0, 0.05) 0%, var(--card) 60%);
-  border: 1px solid rgba(156, 255, 0, 0.15);
+  background: linear-gradient(160deg, rgba(var(--accent-rgb), 0.05) 0%, var(--card) 60%);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   border-top: 2px solid var(--accent);
   border-radius: 12px;
   padding: 18px 20px;
@@ -439,6 +439,26 @@ const avgRating = computed(() => {
   color: var(--text);
   font-size: 0.9rem;
   cursor: pointer;
+  appearance: none;
+  color-scheme: dark;
+  background-image:
+    linear-gradient(45deg, transparent 50%, color-mix(in srgb, var(--muted) 76%, white 24%) 50%),
+    linear-gradient(135deg, color-mix(in srgb, var(--muted) 76%, white 24%) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) calc(50% - 2px),
+    calc(100% - 11px) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 34px;
+}
+.filter-select:focus {
+  outline: none;
+  border-color: rgba(var(--accent-rgb), 0.4);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.14);
+}
+.filter-select option {
+  background: var(--surface-1);
+  color: var(--text);
 }
 
 .results-count { color: var(--muted); font-size: 0.85rem; margin: 0 0 24px; }
@@ -456,8 +476,8 @@ const avgRating = computed(() => {
 }
 
 .vendor-card {
-  background: linear-gradient(160deg, rgba(156, 255, 0, 0.04) 0%, var(--card) 60%);
-  border: 1px solid rgba(156, 255, 0, 0.15);
+  background: linear-gradient(160deg, rgba(var(--accent-rgb), 0.04) 0%, var(--card) 60%);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   border-radius: 16px;
   padding: 24px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -468,7 +488,7 @@ const avgRating = computed(() => {
 
 .vendor-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 32px rgba(156, 255, 0, 0.1);
+  box-shadow: 0 8px 32px rgba(var(--accent-rgb), 0.1);
 }
 
 .vendor-card-header {
@@ -481,7 +501,7 @@ const avgRating = computed(() => {
   width: 52px;
   height: 52px;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--accent), rgba(156, 255, 0, 0.3));
+  background: linear-gradient(135deg, var(--accent), rgba(var(--accent-rgb), 0.3));
   color: #0b1205;
   font-weight: 800;
   font-size: 1.4rem;
@@ -537,8 +557,8 @@ const avgRating = computed(() => {
 }
 
 .vmeta {
-  background: rgba(156, 255, 0, 0.04);
-  border: 1px solid rgba(156, 255, 0, 0.1);
+  background: rgba(var(--accent-rgb), 0.04);
+  border: 1px solid rgba(var(--accent-rgb), 0.1);
   border-radius: 8px;
   padding: 8px 10px;
   display: flex;
@@ -563,9 +583,9 @@ const avgRating = computed(() => {
 }
 
 .brand-tag {
-  background: rgba(156, 255, 0, 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
   color: var(--accent);
-  border: 1px solid rgba(156, 255, 0, 0.25);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
 }
 
 .vendor-platforms {

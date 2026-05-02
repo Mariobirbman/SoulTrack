@@ -1,31 +1,35 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { useRouter } from 'vue-router'
 import {
   isDemoMode,
   isDemoBuyer,
+  isDemoAdmin,
   enableDemoMode,
   enableDemoBuyerMode,
+  enableDemoAdminMode,
 } from '@/lib/demo'
 
 const show = isDemoMode()
-const currentRole: 'seller' | 'buyer' = isDemoBuyer() ? 'buyer' : 'seller'
+const currentRole: 'seller' | 'buyer' | 'admin' = isDemoAdmin() ? 'admin' : isDemoBuyer() ? 'buyer' : 'seller'
 
-const LABELS = { seller: 'Seller', buyer: 'Buyer' } as const
-const COLORS = { seller: '#f5a623', buyer: '#7ecfff' } as const
+const LABELS = { seller: 'Seller', buyer: 'Buyer', admin: 'Admin' } as const
+const COLORS = { seller: '#f5a623', buyer: '#7ecfff', admin: '#c084fc' } as const
 
 const router = useRouter()
 
-function switchTo(r: 'seller' | 'buyer') {
+function switchTo(r: 'seller' | 'buyer' | 'admin') {
   if (r === currentRole) return
   if (r === 'seller') enableDemoMode()
-  else enableDemoBuyerMode()
+  else if (r === 'buyer') enableDemoBuyerMode()
+  else enableDemoAdminMode()
 
-  // Stay on current page where it makes sense, redirect for role-specific pages
   const path = router.currentRoute.value.path
   const sellerPages = ['/vendor-orders', '/sell', '/account']
   const buyerPages = ['/orders']
 
-  if (r === 'seller' && buyerPages.includes(path)) {
+  if (r === 'admin') {
+    window.location.assign('/admin')
+  } else if (r === 'seller' && buyerPages.includes(path)) {
     window.location.assign('/vendor-orders')
   } else if (r === 'buyer' && sellerPages.includes(path)) {
     window.location.assign('/orders')
@@ -55,7 +59,7 @@ function resetDemo() {
       <div class="role-switcher">
         <span class="switcher-label">Switch role:</span>
         <button
-          v-for="r in (['seller', 'buyer'] as const)"
+          v-for="r in (['seller', 'buyer', 'admin'] as const)"
           :key="r"
           class="role-btn"
           :class="{ active: r === currentRole }"
@@ -81,7 +85,7 @@ function resetDemo() {
   right: 0;
   z-index: 9999;
   background: rgb(6, 15, 7);
-  border-top: 1px solid rgba(156, 255, 0, 0.15);
+  border-top: 1px solid rgba(var(--accent-rgb), 0.15);
 }
 
 .demo-bar-inner {
@@ -106,7 +110,7 @@ function resetDemo() {
   font-weight: 700;
   padding: 2px 7px;
   border-radius: 4px;
-  border: 1px solid rgba(156, 255, 0, 0.25);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
   color: var(--accent);
   background: transparent;
 }

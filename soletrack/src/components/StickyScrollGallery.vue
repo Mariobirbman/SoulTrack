@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 const shoe1 = '/images/shoes/pexels-jonathanborba-12031204.jpg'
 const shoe2 = '/images/shoes/pexels-mohammad-khan-3488802-5470890.jpg'
 const shoe3 = '/images/shoes/pexels-delot-15467344.jpg'
@@ -96,7 +96,7 @@ const rightImages = [shoe5, shoe3, shoe6, shoe1, shoe2]
   background: var(--bg);
   color: var(--text);
   padding: 28px 0 88px;
-  border-top: 1px solid rgba(156, 255, 0, 0.07);
+  border-top: 1px solid rgba(var(--accent-rgb), 0.07);
 }
 
 .gallery-intro {
@@ -140,16 +140,16 @@ const rightImages = [shoe5, shoe3, shoe6, shoe1, shoe2]
   min-height: 46px;
   padding: 0 18px;
   border-radius: 10px;
-  border: 1px solid rgba(156, 255, 0, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   color: var(--text);
-  background: rgba(156, 255, 0, 0.04);
+  background: rgba(var(--accent-rgb), 0.04);
   font-weight: 700;
   text-decoration: none;
 }
 
 .gallery-link:hover {
-  background: rgba(156, 255, 0, 0.08);
-  border-color: rgba(156, 255, 0, 0.34);
+  background: rgba(var(--accent-rgb), 0.08);
+  border-color: rgba(var(--accent-rgb), 0.34);
 }
 
 .gallery-link--primary {
@@ -197,7 +197,7 @@ const rightImages = [shoe5, shoe3, shoe6, shoe1, shoe2]
   object-position: center;
   border-radius: 12px;
   display: block;
-  border: 1px solid rgba(156, 255, 0, 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
 }
 
 .gallery-figure--featured .gallery-img {
@@ -207,7 +207,7 @@ const rightImages = [shoe5, shoe3, shoe6, shoe1, shoe2]
 .square {
   min-width: 0;
   background: rgba(13, 22, 16, 0.88);
-  border: 1px solid rgba(156, 255, 0, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   border-radius: 12px;
   padding: 22px;
   display: flex;
@@ -219,8 +219,8 @@ const rightImages = [shoe5, shoe3, shoe6, shoe1, shoe2]
   width: 44px;
   height: 44px;
   border-radius: 10px;
-  background: rgba(156, 255, 0, 0.1);
-  border: 1px solid rgba(156, 255, 0, 0.2);
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -263,7 +263,7 @@ const rightImages = [shoe5, shoe3, shoe6, shoe1, shoe2]
   display: inline-flex;
   align-items: center;
   background: transparent;
-  border: 1px solid rgba(156, 255, 0, 0.3);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
   color: var(--accent);
   font-size: 0.84rem;
   font-weight: 700;
@@ -275,8 +275,8 @@ const rightImages = [shoe5, shoe3, shoe6, shoe1, shoe2]
 }
 
 .square a:hover {
-  background: rgba(156, 255, 0, 0.08);
-  border-color: rgba(156, 255, 0, 0.5);
+  background: rgba(var(--accent-rgb), 0.08);
+  border-color: rgba(var(--accent-rgb), 0.5);
 }
 
 @media (max-width: 960px) {

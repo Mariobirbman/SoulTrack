@@ -1,13 +1,15 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '@/lib/auth'
+import { useRole } from '@/lib/role'
 import FirebaseStatusBanner from '@/components/FirebaseStatusBanner.vue'
 import DemoBar from '@/components/DemoBar.vue'
 import Footer from '@/components/Footer.vue'
 import { useCart } from '@/lib/cart'
 
 const { user } = useAuth()
+const { isAdmin } = useRole()
 const isLoggedIn = computed(() => !!user.value)
 const { totalCount } = useCart()
 
@@ -45,7 +47,6 @@ watch(() => route.fullPath, () => closeMenu())
       <div class="nav-inner">
         <!-- Brand mark -->
         <router-link to="/" class="brand" @click="closeMenu">
-          <span class="brand-mark">ST</span>
           <span class="brand-name">SoleTrack</span>
         </router-link>
 
@@ -92,6 +93,7 @@ watch(() => route.fullPath, () => closeMenu())
               <li><router-link to="/sell" @click="closeMenu">Sell a Shoe</router-link></li>
               <li><router-link to="/orders" @click="closeMenu">My Orders</router-link></li>
               <li><router-link to="/vendor-orders" @click="closeMenu">Vendor Orders</router-link></li>
+              <li v-if="isAdmin"><router-link to="/admin" @click="closeMenu">Admin Panel</router-link></li>
             </ul>
           </li>
 
@@ -101,6 +103,7 @@ watch(() => route.fullPath, () => closeMenu())
             <li class="mobile-account-link"><router-link to="/sell" @click="closeMenu">Sell a Shoe</router-link></li>
             <li class="mobile-account-link"><router-link to="/orders" @click="closeMenu">My Orders</router-link></li>
             <li class="mobile-account-link"><router-link to="/vendor-orders" @click="closeMenu">Vendor Orders</router-link></li>
+            <li v-if="isAdmin" class="mobile-account-link"><router-link to="/admin" @click="closeMenu">Admin Panel</router-link></li>
           </template>
         </ul>
       </div>
@@ -121,7 +124,7 @@ watch(() => route.fullPath, () => closeMenu())
   top: 8px;
   z-index: 1001;
   background: var(--card);
-  border: 1px solid rgba(156, 255, 0, 0.25);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
   color: var(--text);
   padding: 8px 12px;
   border-radius: 10px;
@@ -134,10 +137,16 @@ nav {
   position: sticky;
   top: 0;
   z-index: 999;
-  background: rgba(6, 15, 7, 0.94);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(6, 15, 7, 0.98);
   border-bottom: 1px solid rgba(100, 200, 100, 0.08);
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  nav {
+    background: rgba(6, 15, 7, 0.94);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
 }
 
 .nav-inner {
@@ -158,23 +167,20 @@ nav {
   flex-shrink: 0;
 }
 
-.brand-mark {
-  background: var(--accent);
-  color: #0b1205;
-  font-weight: 900;
-  font-size: 0.68rem;
-  letter-spacing: 0.04em;
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.brand-logo {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
   flex-shrink: 0;
-  transition: opacity 0.2s;
+  transition: transform 0.2s ease, opacity 0.2s ease;
 }
-
-.brand:hover .brand-mark { opacity: 0.85; }
+.brand:hover .brand-logo {
+  transform: translateY(-1px);
+  opacity: 0.92;
+}
 
 .brand-name {
   font-weight: 900;
@@ -188,7 +194,7 @@ nav {
   display: none;
   margin-left: auto;
   background: transparent;
-  border: 1px solid rgba(156, 255, 0, 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   color: var(--text);
   padding: 10px;
   border-radius: 10px;
@@ -234,18 +240,18 @@ nav a {
   gap: 5px;
 }
 
-nav a:hover { color: var(--text); background: rgba(156, 255, 0, 0.06); }
+nav a:hover { color: var(--text); background: rgba(var(--accent-rgb), 0.06); }
 nav a.router-link-exact-active { color: var(--accent); }
 
 /* Login CTA — slightly elevated */
 .nav-cta {
-  background: rgba(156, 255, 0, 0.08) !important;
-  border: 1px solid rgba(156, 255, 0, 0.2);
+  background: rgba(var(--accent-rgb), 0.08) !important;
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   color: var(--text) !important;
   font-weight: 700 !important;
   padding: 8px 14px !important;
 }
-.nav-cta:hover { background: rgba(156, 255, 0, 0.14) !important; }
+.nav-cta:hover { background: rgba(var(--accent-rgb), 0.14) !important; }
 
 /* Cart badge */
 .cart-link { position: relative; }
@@ -256,7 +262,7 @@ nav a.router-link-exact-active { color: var(--accent); }
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: 6px;
   background: var(--accent);
   color: #0b1205;
   font-size: 0.7rem;
@@ -273,7 +279,7 @@ nav a.router-link-exact-active { color: var(--accent); }
   align-items: center;
   gap: 6px;
   background: transparent;
-  border: 1px solid rgba(156, 255, 0, 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   color: var(--text);
   font-size: 0.92rem;
   font-weight: 700;
@@ -285,8 +291,8 @@ nav a.router-link-exact-active { color: var(--accent); }
 }
 
 .account-btn:hover {
-  background: rgba(156, 255, 0, 0.06);
-  border-color: rgba(156, 255, 0, 0.3);
+  background: rgba(var(--accent-rgb), 0.06);
+  border-color: rgba(var(--accent-rgb), 0.3);
 }
 
 .chevron {
@@ -303,7 +309,7 @@ nav a.router-link-exact-active { color: var(--accent); }
   right: 0;
   min-width: 160px;
   background: rgba(6, 15, 7, 0.98);
-  border: 1px solid rgba(156, 255, 0, 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   border-radius: 12px;
   padding: 6px;
   display: flex;
@@ -328,7 +334,7 @@ nav a.router-link-exact-active { color: var(--accent); }
 
 .account-dropdown a:hover {
   color: var(--text) !important;
-  background: rgba(156, 255, 0, 0.06) !important;
+  background: rgba(var(--accent-rgb), 0.06) !important;
 }
 
 /* ── Mobile overrides ───────────────────────────────── */

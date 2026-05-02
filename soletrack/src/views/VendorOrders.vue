@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { useAuth } from '@/lib/auth'
@@ -127,7 +127,7 @@ const total = computed(() => orders.value.reduce((a, o) => a + (Number(o.subtota
 
 .notice { border-radius: 12px; padding: 10px 12px; border: 1px solid; margin: 10px 0; }
 .notice.error { border-color: rgba(255,50,50,0.35); color: var(--danger); background: rgba(255,50,50,0.06); }
-.notice.muted { border-color: rgba(156, 255, 0, 0.12); color: var(--muted); background: rgba(255,255,255,0.02); }
+.notice.muted { border-color: rgba(var(--accent-rgb), 0.12); color: var(--muted); background: rgba(255,255,255,0.02); }
 .empty { padding: 40px 0; text-align: center; }
 .muted { color: var(--muted); }
 .small { font-size: 0.85rem; }
@@ -142,11 +142,11 @@ const total = computed(() => orders.value.reduce((a, o) => a + (Number(o.subtota
   gap: 12px;
   padding: 12px;
   border-radius: 14px;
-  border: 1px solid rgba(156, 255, 0, 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
   background: rgba(255,255,255,0.02);
   text-decoration: none;
 }
-.order:hover { border-color: rgba(156, 255, 0, 0.22); }
+.order:hover { border-color: rgba(var(--accent-rgb), 0.22); }
 .buyer-name { color: var(--text); font-weight: 900; }
 .pickup-time { margin-top: 4px; }
 .right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
@@ -156,20 +156,20 @@ const total = computed(() => orders.value.reduce((a, o) => a + (Number(o.subtota
   font-weight: 800;
   padding: 3px 9px;
   border-radius: 6px;
-  border: 1px solid rgba(156, 255, 0, 0.25);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
   color: var(--accent);
-  background: rgba(156, 255, 0, 0.06);
+  background: rgba(var(--accent-rgb), 0.06);
   white-space: nowrap;
 }
 .status-chip.placed   { border-color: rgba(100,180,255,0.3); color: #7ecfff; background: rgba(100,180,255,0.07); }
 .status-chip.accepted { border-color: rgba(255,180,0,0.3);   color: #f5a623; background: rgba(255,180,0,0.07); }
-.status-chip.ready    { border-color: rgba(156,255,0,0.3);   color: var(--accent); background: rgba(156,255,0,0.07); }
+.status-chip.ready    { border-color: rgba(var(--accent-rgb),0.3);   color: var(--accent); background: rgba(var(--accent-rgb),0.07); }
 .status-chip.picked_up { border-color: rgba(80,220,120,0.3); color: var(--success); background: rgba(80,220,120,0.07); }
 
 .btn {
   padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(156, 255, 0, 0.15);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   background: transparent;
   color: var(--text);
   cursor: pointer;

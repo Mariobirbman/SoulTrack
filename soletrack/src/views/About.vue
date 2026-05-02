@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="about-page">
 
     <div class="about-hero">
@@ -104,8 +104,8 @@
 .mission-section {
   margin-bottom: 56px;
   padding: 32px;
-  background: linear-gradient(160deg, rgba(156, 255, 0, 0.04) 0%, var(--card) 60%);
-  border: 1px solid rgba(156, 255, 0, 0.15);
+  background: linear-gradient(160deg, rgba(var(--accent-rgb), 0.04) 0%, var(--card) 60%);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   border-left: 3px solid var(--accent);
   border-radius: 12px;
 }
@@ -121,8 +121,8 @@
 }
 
 .feature-card {
-  background: linear-gradient(160deg, rgba(156, 255, 0, 0.05) 0%, var(--card) 60%);
-  border: 1px solid rgba(156, 255, 0, 0.15);
+  background: linear-gradient(160deg, rgba(var(--accent-rgb), 0.05) 0%, var(--card) 60%);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   border-top: 2px solid var(--accent);
   border-radius: 16px;
   padding: 28px 24px;
@@ -131,7 +131,7 @@
 
 .feature-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 32px rgba(156, 255, 0, 0.1);
+  box-shadow: 0 8px 32px rgba(var(--accent-rgb), 0.1);
 }
 
 .feature-icon { font-size: 2rem; display: block; margin-bottom: 12px; }
@@ -142,9 +142,9 @@
 .cta-section {
   text-align: center;
   padding: 48px 24px;
-  border: 1px solid rgba(156, 255, 0, 0.15);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   border-radius: 16px;
-  background: linear-gradient(160deg, rgba(156, 255, 0, 0.05) 0%, var(--card) 60%);
+  background: linear-gradient(160deg, rgba(var(--accent-rgb), 0.05) 0%, var(--card) 60%);
 }
 
 .cta-section h2 { margin: 0 0 8px; color: var(--text); font-size: 1.6rem; }

@@ -35,6 +35,7 @@ const VENDOR_KEY = 'soletrack_demo_vendor_v1'
 const PRODUCTS_KEY = 'soletrack_demo_products_v1'
 const ORDERS_KEY = 'soletrack_demo_orders_v1'
 const MESSAGES_KEY = 'soletrack_demo_messages_v1'
+const PENDING_KEY = 'soletrack_demo_pending_v1'
 export const DEMO_SELLER_UID = '__demo__me'
 export const DEMO_BUYER_UID = '__demo__buyer'
 
@@ -523,6 +524,170 @@ export function addDemoMessage(
   return all[orderId]!
 }
 
+// ─── Admin: Pending Queue ─────────────────────────────────────────────────────
+
+export type DemoPendingProduct = {
+  id: string
+  vendorName: string
+  vendorUid: string
+  name: string
+  brand: string
+  size: string
+  price: number
+  condition: NonNullable<DemoProduct['condition']>
+  image: string
+  description: string
+}
+
+export function getDemoPendingProducts(): DemoPendingProduct[] {
+  if (typeof window === 'undefined') return []
+  const existing = safeJsonParse<DemoPendingProduct[]>(window.localStorage.getItem(PENDING_KEY))
+  if (Array.isArray(existing)) return existing
+
+  const seeded: DemoPendingProduct[] = [
+    {
+      id: 'pending-1',
+      vendorUid: '__demo__street_finds',
+      vendorName: 'Street Finds Co.',
+      name: 'Nike Air Force 1 Low \'07',
+      brand: 'Nike',
+      size: '10',
+      price: 130,
+      condition: 'New',
+      image: '/images/shoes/pexels-dl-af1-33597709.jpg',
+      description: 'Classic AF1, box included. Local pickup only.',
+    },
+    {
+      id: 'pending-2',
+      vendorUid: '__demo__kicks_spot',
+      vendorName: 'Kicks Spot ATL',
+      name: 'Jordan 1 Retro High OG "Bred"',
+      brand: 'Jordan',
+      size: '9.5',
+      price: 420,
+      condition: 'DS',
+      image: '/images/shoes/pexels-dl-jordan-11718014.jpg',
+      description: 'Deadstock, receipt available. Never tried on.',
+    },
+    {
+      id: 'pending-3',
+      vendorUid: '__demo__kicks_spot',
+      vendorName: 'Kicks Spot ATL',
+      name: 'New Balance 550 White Green',
+      brand: 'New Balance',
+      size: '11',
+      price: 145,
+      condition: 'New',
+      image: '/images/shoes/pexels-dl-nb-30755567.jpg',
+      description: 'Clean pair, great condition. Asking retail+.',
+    },
+  ]
+  window.localStorage.setItem(PENDING_KEY, safeJsonStringify(seeded))
+  return seeded
+}
+
+export function approveDemoPending(id: string) {
+  const pending = getDemoPendingProducts()
+  const item = pending.find((p) => p.id === id)
+  if (!item) return
+  const next = pending.filter((p) => p.id !== id)
+  window.localStorage.setItem(PENDING_KEY, safeJsonStringify(next))
+  upsertDemoProduct({ ...item, status: 'approved' })
+}
+
+export function rejectDemoPending(id: string) {
+  const next = getDemoPendingProducts().filter((p) => p.id !== id)
+  window.localStorage.setItem(PENDING_KEY, safeJsonStringify(next))
+}
+
+// ─── Admin: Unified Product Queue ────────────────────────────────────────────
+
+export function getOrSeedAdminDemoQueue(): void {
+  const products = getOrSeedDemoProducts()
+  const hasPending = products.some((p) => p.status === 'pending')
+  if (hasPending) return
+
+  const pending: DemoProductStored[] = [
+    {
+      id: 'prod-pending-1',
+      vendorUid: '__demo__street_finds',
+      vendorName: 'Street Finds Co.',
+      name: "Nike Air Force 1 Low '07",
+      brand: 'Nike',
+      size: '10',
+      price: 130,
+      condition: 'New',
+      active: false,
+      image: '/images/shoes/pexels-dl-af1-33597709.jpg',
+      platform: 'Local',
+      description: 'Classic AF1, box included. Local pickup only.',
+      status: 'pending',
+    },
+    {
+      id: 'prod-pending-2',
+      vendorUid: '__demo__kicks_spot',
+      vendorName: 'Kicks Spot ATL',
+      name: 'Jordan 1 Retro High OG "Bred"',
+      brand: 'Jordan',
+      size: '9.5',
+      price: 420,
+      condition: 'DS',
+      active: false,
+      image: '/images/shoes/pexels-dl-jordan-11718014.jpg',
+      platform: 'Local',
+      description: 'Deadstock, receipt available. Never tried on.',
+      status: 'pending',
+    },
+    {
+      id: 'prod-pending-3',
+      vendorUid: '__demo__kicks_spot',
+      vendorName: 'Kicks Spot ATL',
+      name: 'New Balance 550 White Green',
+      brand: 'New Balance',
+      size: '11',
+      price: 145,
+      condition: 'New',
+      active: false,
+      image: '/images/shoes/pexels-dl-nb-30755567.jpg',
+      platform: 'Local',
+      description: 'Clean pair, great condition. Asking retail+.',
+      status: 'pending',
+    },
+  ]
+
+  saveDemoProducts([...pending, ...products])
+}
+
+export function getDemoAdminProducts() {
+  const all = getOrSeedDemoProducts()
+  return {
+    pending: all.filter((p) => p.status === 'pending'),
+    active: all.filter((p) => p.status === 'active'),
+    rejected: all.filter((p) => p.status === 'rejected'),
+  }
+}
+
+export function approveProductById(id: string) {
+  const all = getOrSeedDemoProducts()
+  const p = all.find((x) => x.id === id)
+  if (!p) return
+  upsertDemoProduct({ ...p, status: 'active', active: true })
+}
+
+export function rejectProductById(id: string) {
+  const all = getOrSeedDemoProducts()
+  const p = all.find((x) => x.id === id)
+  if (!p) return
+  upsertDemoProduct({ ...p, status: 'rejected', active: false })
+}
+
+export function restoreProductById(id: string) {
+  const all = getOrSeedDemoProducts()
+  const p = all.find((x) => x.id === id)
+  if (!p) return
+  upsertDemoProduct({ ...p, status: 'pending', active: false })
+}
+
 // ─── Sample Listings ──────────────────────────────────────────────────────────
 
 export function addDemoSampleListings(vendorUid: string, vendorName: string) {
@@ -570,4 +735,3 @@ export function addDemoSampleListings(vendorUid: string, vendorName: string) {
   saveDemoProducts(next)
   return next
 }
-

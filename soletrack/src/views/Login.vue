@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -12,10 +12,11 @@ import {
 } from 'firebase/auth'
 import { auth, firebaseConfigured } from '@/lib/firebase'
 import { upsertUserProfile } from '@/lib/profile'
-import { disableDemoMode, enableDemoBuyerMode, enableDemoMode, isDemoBuyer, isDemoMode } from '@/lib/demo'
+import { disableDemoMode, enableDemoAdminMode, enableDemoBuyerMode, enableDemoMode, isDemoAdmin, isDemoBuyer, isDemoMode } from '@/lib/demo'
 
 const demoActive = ref(isDemoMode())
 const demoIsBuyer = ref(isDemoBuyer())
+const demoIsAdmin = ref(isDemoAdmin())
 
 const router = useRouter()
 const route = useRoute()
@@ -33,6 +34,11 @@ const isLikelyInAppBrowser = computed(() => {
   const ua = navigator.userAgent || ''
   return /FBAN|FBAV|Instagram|Line|TikTok|Snapchat|LinkedInApp|Twitter|wv\b/i.test(ua)
 })
+const isLocalDev = computed(() => {
+  const host = window.location.hostname
+  return host === 'localhost' || host === '127.0.0.1'
+})
+const shouldHideGooglePopup = computed(() => isLikelyInAppBrowser.value || isLocalDev.value)
 
 function resetMessages() {
   error.value = ''
@@ -77,6 +83,8 @@ function authErrorMessage(err: unknown) {
       return 'Too many attempts. Wait a bit and try again.'
     case 'auth/network-request-failed':
       return 'Network error. Check your connection and try again.'
+    case 'auth/invalid-origin':
+      return 'This browser context is blocked for popup sign-in. Use Google redirect or Email/Password.'
     case 'auth/popup-blocked':
       return 'Your browser blocked the sign-in popup. Try “Continue with Google (redirect)”.'
     case 'auth/popup-closed-by-user':
@@ -102,6 +110,11 @@ function enterDemoUser() {
 function enterDemoBuyer() {
   enableDemoBuyerMode()
   window.location.assign('/browse')
+}
+
+function enterDemoAdmin() {
+  enableDemoAdminMode()
+  window.location.assign('/admin')
 }
 
 function exitDemoMode() {
@@ -229,10 +242,13 @@ async function loginWithGoogleRedirect() {
         <button class="btnDemo buyer" type="button" @click="enterDemoBuyer">
           Buyer
         </button>
+        <button class="btnDemo admin" type="button" @click="enterDemoAdmin">
+          Admin
+        </button>
       </div>
       <div v-else class="demo-active-row">
-        <span class="demo-role-tag" :class="demoIsBuyer ? 'buyer' : 'seller'">
-          {{ demoIsBuyer ? 'Buyer' : 'Seller' }} active
+        <span class="demo-role-tag" :class="demoIsAdmin ? 'admin' : demoIsBuyer ? 'buyer' : 'seller'">
+          {{ demoIsAdmin ? 'Admin' : demoIsBuyer ? 'Buyer' : 'Seller' }} active
         </span>
         <button class="btnDemo exit" type="button" @click="exitDemoMode">
           Switch role
@@ -249,33 +265,28 @@ async function loginWithGoogleRedirect() {
       <h2 v-if="mode === 'login'">Sign in to your account</h2>
       <h2 v-else>Create a new account</h2>
 
-      <button class="google-btn" type="button" @click="loginWithGoogle">Continue with Google</button>
-      <p v-if="isLikelyInAppBrowser" class="hint">
-        Google sign-in is blocked in some in-app browsers. Open this page in Chrome/Safari, or use redirect sign-in below.
+      <p class="hint auth-first">
+        Recommended for local testing: sign in with Email + Password first.
       </p>
-      <button class="google-btn secondary" type="button" @click="loginWithGoogleRedirect">
-        Continue with Google (redirect)
-      </button>
-      <div class="divider"><span>or</span></div>
 
       <div v-if="mode === 'register'" class="form-row">
         <label for="name">Name</label>
-        <input id="name" v-model="name" type="text" autocomplete="name" />
+        <input id="name" name="name" v-model="name" type="text" autocomplete="name" />
       </div>
 
       <div class="form-row">
         <label for="email">Email</label>
-        <input id="email" v-model="email" type="email" autocomplete="username" />
+        <input id="email" name="email" v-model="email" type="email" autocomplete="username" />
       </div>
 
       <div class="form-row">
         <label for="password">Password</label>
-        <input id="password" v-model="password" type="password" :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" />
+        <input id="password" name="password" v-model="password" type="password" :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" />
       </div>
 
       <div v-if="mode === 'register'" class="form-row">
         <label for="confirm">Confirm Password</label>
-        <input id="confirm" v-model="confirmPassword" type="password" autocomplete="new-password" />
+        <input id="confirm" name="confirmPassword" v-model="confirmPassword" type="password" autocomplete="new-password" />
       </div>
 
       <div class="messages">
@@ -286,6 +297,22 @@ async function loginWithGoogleRedirect() {
       <div class="actions">
         <button type="submit">{{ mode === 'login' ? 'Login' : 'Register' }}</button>
       </div>
+
+      <div class="divider"><span>or</span></div>
+      <p v-if="isLikelyInAppBrowser || isLocalDev" class="hint">
+        Google popup can be blocked in this browser context. Use redirect sign-in instead.
+      </p>
+      <button class="google-btn secondary" type="button" @click="loginWithGoogleRedirect">
+        Continue with Google (redirect)
+      </button>
+      <button
+        v-if="!shouldHideGooglePopup"
+        class="google-btn"
+        type="button"
+        @click="loginWithGoogle"
+      >
+        Continue with Google (popup)
+      </button>
     </form>
   </div>
 </template>
@@ -298,8 +325,8 @@ async function loginWithGoogleRedirect() {
   gap: 10px;
   padding: 12px 12px;
   border-radius: 12px;
-  border: 1px solid rgba(156, 255, 0, 0.14);
-  background: rgba(156, 255, 0, 0.04);
+  border: 1px solid rgba(var(--accent-rgb), 0.14);
+  background: rgba(var(--accent-rgb), 0.04);
   margin-bottom: 12px;
 }
 .demo-copy { display: grid; gap: 2px; }
@@ -315,6 +342,7 @@ async function loginWithGoogleRedirect() {
 }
 .demo-role-tag.seller { background: rgba(255,180,0,0.10);   color: #f5a623;       border: 1px solid rgba(255,180,0,0.3); }
 .demo-role-tag.buyer  { background: rgba(100,180,255,0.12); color: #7ecfff;       border: 1px solid rgba(100,180,255,0.3); }
+.demo-role-tag.admin  { background: rgba(192,132,252,0.12); color: #c084fc;       border: 1px solid rgba(192,132,252,0.3); }
 
 .btnDemo {
   padding: 8px 14px;
@@ -329,6 +357,7 @@ async function loginWithGoogleRedirect() {
 }
 .btnDemo.seller { border-color: rgba(255,180,0,0.3);   color: #f5a623; }
 .btnDemo.buyer  { border-color: rgba(100,180,255,0.3); color: #7ecfff; }
+.btnDemo.admin  { border-color: rgba(192,132,252,0.3); color: #c084fc; }
 .btnDemo.exit   { border-color: rgba(255,80,80,0.3);   color: var(--danger); }
 .btnDemo:hover  { opacity: 0.8; }
 .auth-container {
@@ -346,7 +375,7 @@ async function loginWithGoogleRedirect() {
 .tabs button {
   flex: 1;
   background: transparent;
-  border: 1px solid rgba(156, 255, 0, 0.15);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   color: var(--muted);
   padding: 10px 12px;
   border-radius: 10px;
@@ -356,13 +385,13 @@ async function loginWithGoogleRedirect() {
 
 .tabs button.active {
   color: var(--text);
-  border-color: rgba(156, 255, 0, 0.35);
-  background: rgba(156, 255, 0, 0.06);
+  border-color: rgba(var(--accent-rgb), 0.35);
+  background: rgba(var(--accent-rgb), 0.06);
 }
 
 .auth-form {
   background: var(--card);
-  border: 1px solid rgba(156, 255, 0, 0.14);
+  border: 1px solid rgba(var(--accent-rgb), 0.14);
   border-radius: 16px;
   padding: 24px;
 }
@@ -380,8 +409,8 @@ async function loginWithGoogleRedirect() {
   width: 100%;
   padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(156, 255, 0, 0.25);
-  background: rgba(156, 255, 0, 0.06);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
+  background: rgba(var(--accent-rgb), 0.06);
   color: var(--text);
   font-weight: 800;
   cursor: pointer;
@@ -389,9 +418,10 @@ async function loginWithGoogleRedirect() {
 .google-btn.secondary {
   margin-top: 10px;
   background: transparent;
-  border: 1px solid rgba(156, 255, 0, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   color: var(--muted);
 }
+.auth-first { margin: 0 0 10px; }
 .google-btn:hover { opacity: 0.9; }
 .hint { margin: 10px 0 0; color: var(--muted); font-size: 0.85rem; line-height: 1.5; }
 
@@ -408,7 +438,7 @@ async function loginWithGoogleRedirect() {
   content: '';
   flex: 1;
   height: 1px;
-  background: rgba(156, 255, 0, 0.12);
+  background: rgba(var(--accent-rgb), 0.12);
 }
 
 .form-row {

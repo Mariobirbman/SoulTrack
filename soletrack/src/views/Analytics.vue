@@ -6,6 +6,8 @@ import { simulatePrice } from '@/lib/priceSim'
 import { collection, onSnapshot, query } from 'firebase/firestore'
 import { db, firebaseConfigured } from '@/lib/firebase'
 import { demoProducts } from '@/lib/demoMarketplace'
+import { isDemoBuyer } from '@/lib/demo'
+import { buildMarketDecisionSummary } from '@/lib/marketDecisions'
 const loading = ref(true)
 const error = ref('')
 // shallowRef: only the array reference is reactive, not every row object inside.
@@ -13,6 +15,7 @@ const error = ref('')
 const rows = shallowRef<SalesOrderRow[]>([])
 
 const activeTab = ref<'orders' | 'shoes' | 'marketplace'>('marketplace')
+const roleView = ref<'buyer' | 'seller'>(isDemoBuyer() ? 'buyer' : 'seller')
 const isLiveMarketplaceData = computed(() => firebaseConfigured && !!db)
 const marketplaceDataModeLabel = computed(() =>
   isLiveMarketplaceData.value ? 'Live Firestore listings' : 'Demo fallback data'
@@ -170,6 +173,23 @@ const listingShareByBrand = computed(() => {
 
 const listingTrend = computed(() => monthlyListings.value.slice(-6))
 const listingTrendMaxCount = computed(() => Math.max(...listingTrend.value.map((m) => m.count), 1))
+const deepDiveOpen = ref(false)
+
+const marketplaceAvgPrice = computed(() => {
+  if (!marketplaceProducts.value.length) return 0
+  const total = marketplaceProducts.value.reduce((sum, p: any) => sum + Number(p.price ?? 0), 0)
+  return total / marketplaceProducts.value.length
+})
+
+const listingTrendChangePct = computed(() => {
+  const trend = listingTrend.value
+  if (trend.length < 2) return 0
+  const half = Math.max(1, Math.floor(trend.length / 2))
+  const older = trend.slice(0, half).reduce((sum, row) => sum + row.count, 0)
+  const recent = trend.slice(half).reduce((sum, row) => sum + row.count, 0)
+  if (older <= 0) return 0
+  return ((recent - older) / older) * 100
+})
 
 // AnalyticsData table rows — focused recent listing trend
 const analyticsData = computed(() =>
@@ -400,6 +420,19 @@ const dashboardChannelSplit = computed(() => {
   }
 })
 
+const decisionSummary = computed(() => {
+  const topShare = listingShareByBrand.value.length ? listingShareByBrand.value[0]!.pct : 0
+  return buildMarketDecisionSummary({
+    roleView: roleView.value,
+    listingCount: marketplaceProducts.value.length,
+    sampledOrderCount: dashboardSampleMeta.value.used,
+    marketplaceAvgPrice: marketplaceAvgPrice.value,
+    benchmarkAvgPrice: dashboardTotals.value.avgOrderValue,
+    trendChangePct: listingTrendChangePct.value,
+    topBrandSharePct: topShare,
+  })
+})
+
 const visibleTotals = computed(() =>
   activeTab.value === 'marketplace'
     ? {
@@ -536,28 +569,9 @@ function resetPaging() {
         </div>
       </div>
 
-      <div class="module-guide">
-        <div class="module-guide__title">Analytics Modules</div>
-        <div class="module-guide__grid">
-          <article class="module-card" :class="{ active: activeTab === 'marketplace' }">
-            <h3>Market Overview</h3>
-            <p>Condensed executive view of trends using a representative sample from filtered orders.</p>
-            <p class="module-meta">Used for: fast business decisions and stakeholder updates.</p>
-            <p class="module-meta">Source: global dataset subset + SoleTrack listings.</p>
-          </article>
-          <article class="module-card" :class="{ active: activeTab === 'shoes' }">
-            <h3>Shoe Catalog</h3>
-            <p>Aggregated product-level view with pricing movement simulation and demand signals.</p>
-            <p class="module-meta">Used for: spotting high-performing models and pricing ranges.</p>
-            <p class="module-meta">Source: filtered global dataset (aggregated by shoe key).</p>
-          </article>
-          <article class="module-card" :class="{ active: activeTab === 'orders' }">
-            <h3>Order Data</h3>
-            <p>Row-level transactional records with search, filters, sorting, and paging controls.</p>
-            <p class="module-meta">Used for: detailed validation and operational investigation.</p>
-            <p class="module-meta">Source: filtered global dataset (raw order rows).</p>
-          </article>
-        </div>
+      <div class="decision-intro">
+        <h2 class="decision-title">Decision Hub</h2>
+        <p class="decision-sub">Use the three decision cards first, then open Deep Dive only if you need more detail.</p>
       </div>
 
       <!-- ── Market Data Dashboard Tab ── -->
@@ -568,12 +582,65 @@ function resetPaging() {
 
         <template v-else>
 
-          <div class="dash-section-label">Executive Snapshot</div>
-          <div class="subset-note">
-            Using <strong>{{ fmtNum(dashboardSampleMeta.used) }}</strong> sampled orders from
-            <strong>{{ fmtNum(dashboardSampleMeta.total) }}</strong> filtered rows ({{ dashboardSampleMeta.pct }}% sample)
-            to keep comparisons readable.
+          <div class="role-toggle-row">
+            <span class="role-toggle-label">Viewing as:</span>
+            <div class="role-toggle">
+              <button class="role-btn" :class="{ active: roleView === 'buyer' }" @click="roleView = 'buyer'">Buyer</button>
+              <button class="role-btn" :class="{ active: roleView === 'seller' }" @click="roleView = 'seller'">Seller</button>
+            </div>
           </div>
+
+          <div class="role-intro">
+            <template v-if="roleView === 'buyer'">
+              <strong>Buyer mode:</strong> decide fair price, timing, and demand pressure before checkout.
+            </template>
+            <template v-else>
+              <strong>Seller mode:</strong> decide list price, whether to list now, and which brands to prioritize.
+            </template>
+          </div>
+
+          <div class="decision-grid">
+            <article class="decision-card">
+              <p class="decision-card__label">{{ decisionSummary.priceDecision.title }}</p>
+              <p class="decision-card__status">{{ decisionSummary.priceDecision.status }}</p>
+              <p class="decision-card__recommendation">{{ decisionSummary.priceDecision.recommendation }}</p>
+              <p class="decision-card__reason">{{ decisionSummary.priceDecision.reason }}</p>
+              <div class="decision-metrics">
+                <span v-for="metric in decisionSummary.priceDecision.metrics" :key="`price-${metric.label}`">{{ metric.label }}: {{ metric.value }}</span>
+              </div>
+              <p class="decision-card__confidence">Confidence: {{ decisionSummary.priceDecision.confidence }}</p>
+            </article>
+            <article class="decision-card">
+              <p class="decision-card__label">{{ decisionSummary.timingDecision.title }}</p>
+              <p class="decision-card__status">{{ decisionSummary.timingDecision.status }}</p>
+              <p class="decision-card__recommendation">{{ decisionSummary.timingDecision.recommendation }}</p>
+              <p class="decision-card__reason">{{ decisionSummary.timingDecision.reason }}</p>
+              <div class="decision-metrics">
+                <span v-for="metric in decisionSummary.timingDecision.metrics" :key="`timing-${metric.label}`">{{ metric.label }}: {{ metric.value }}</span>
+              </div>
+              <p class="decision-card__confidence">Confidence: {{ decisionSummary.timingDecision.confidence }}</p>
+            </article>
+            <article class="decision-card">
+              <p class="decision-card__label">{{ decisionSummary.demandDecision.title }}</p>
+              <p class="decision-card__status">{{ decisionSummary.demandDecision.status }}</p>
+              <p class="decision-card__recommendation">{{ decisionSummary.demandDecision.recommendation }}</p>
+              <p class="decision-card__reason">{{ decisionSummary.demandDecision.reason }}</p>
+              <div class="decision-metrics">
+                <span v-for="metric in decisionSummary.demandDecision.metrics" :key="`demand-${metric.label}`">{{ metric.label }}: {{ metric.value }}</span>
+              </div>
+              <p class="decision-card__confidence">Confidence: {{ decisionSummary.demandDecision.confidence }}</p>
+            </article>
+          </div>
+
+          <details class="deep-dive" :open="deepDiveOpen" @toggle="deepDiveOpen = !deepDiveOpen">
+            <summary class="deep-dive__summary">{{ deepDiveOpen ? 'Hide Deep Dive Data' : 'Open Deep Dive Data' }}</summary>
+
+            <div class="dash-section-label">Executive Snapshot</div>
+            <div class="subset-note">
+              Using <strong>{{ fmtNum(dashboardSampleMeta.used) }}</strong> sampled orders from
+              <strong>{{ fmtNum(dashboardSampleMeta.total) }}</strong> filtered rows ({{ dashboardSampleMeta.pct }}% sample)
+              to keep comparisons readable.
+            </div>
 
           <div class="kpi-row kpi-row--executive">
             <div class="kpi">
@@ -738,6 +805,7 @@ function resetPaging() {
             </div>
             <p v-else class="muted small">No analytics data yet.</p>
           </div>
+          </details>
 
         </template>
       </div>
@@ -901,6 +969,20 @@ function resetPaging() {
 .stat { background: linear-gradient(160deg, rgba(156, 255, 0, 0.05) 0%, var(--card) 60%); border: 1px solid rgba(156, 255, 0, 0.15); border-top: 2px solid var(--accent); border-radius: 12px; padding: 14px 16px; }
 .stat__label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
 .stat__value { font-size: 1.3rem; font-weight: 900; color: var(--text); margin-top: 4px; }
+.decision-intro { margin: 6px 0 16px; }
+.decision-title { margin: 0; font-size: 1.04rem; color: var(--text); }
+.decision-sub { margin: 6px 0 0; color: var(--muted); font-size: 0.84rem; }
+.decision-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+@media (max-width: 880px) { .decision-grid { grid-template-columns: 1fr; } }
+.decision-card { border: 1px solid rgba(156, 255, 0, 0.2); border-radius: 12px; padding: 14px; background: rgba(156, 255, 0, 0.04); }
+.decision-card__label { margin: 0 0 4px; font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.decision-card__status { margin: 0 0 8px; font-size: 1.1rem; font-weight: 900; color: var(--text); }
+.decision-card__recommendation { margin: 0 0 8px; color: var(--text); font-weight: 700; font-size: 0.9rem; }
+.decision-card__reason { margin: 0 0 8px; color: var(--muted); font-size: 0.82rem; line-height: 1.4; }
+.decision-metrics { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 0.78rem; margin-bottom: 8px; }
+.decision-card__confidence { margin: 0; color: var(--accent); font-size: 0.78rem; font-weight: 700; }
+.deep-dive { border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 10px; background: rgba(255,255,255,0.015); }
+.deep-dive__summary { cursor: pointer; color: var(--text); font-weight: 800; padding: 4px 2px 10px; }
 .module-guide {
   margin: 6px 0 18px;
   border: 1px solid rgba(255,255,255,0.08);

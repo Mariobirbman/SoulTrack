@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   addDoc,
@@ -14,6 +14,14 @@ import {
 } from 'firebase/firestore'
 import { useAuth } from '@/lib/auth'
 import { db, demoMode, firebaseConfigured } from '@/lib/firebase'
+import {
+  groupMessages,
+  isNearBottom,
+  shouldAutoScrollOnAppend,
+  shouldSendOnEnter,
+  validateComposerInput,
+  type GroupedChatMessage,
+} from '@/lib/orderChat'
 import {
   addDemoMessage,
   getDemoMessages,
@@ -55,6 +63,14 @@ const order = ref<VendorOrder | null>(null)
 const messages = ref<Array<{ id: string } & Message>>([])
 const msg = ref('')
 const sending = ref(false)
+const messagesLoading = ref(true)
+const messagesError = ref('')
+const composerError = ref('')
+const composerMaxLen = 500
+const streamEl = ref<HTMLElement | null>(null)
+const showJumpToLatest = ref(false)
+const wasNearBottom = ref(true)
+const hadInitialAutoScroll = ref(false)
 
 let stopOrder: (() => void) | null = null
 let stopMsgs: (() => void) | null = null
@@ -77,6 +93,13 @@ function fmtUSD(n: number) {
 
 const isVendorView = computed(() => !!user.value && !!order.value && user.value.uid === order.value.vendorUid)
 const backLink = computed(() => (isVendorView.value ? '/vendor-orders' : '/orders'))
+const chatRoleLabel = computed(() => (isVendorView.value ? 'Seller view' : 'Buyer view'))
+const chatPeerLabel = computed(() => (isVendorView.value ? 'Buyer' : 'Seller'))
+const chatOnlineLabel = computed(() => (firebaseConfigured && !demoMode ? 'Live' : 'Demo'))
+const groupedMessages = computed<GroupedChatMessage[]>(() => groupMessages(messages.value as any, user.value?.uid ?? null))
+const canSend = computed(() => validateComposerInput(msg.value, composerMaxLen).ok && !sending.value)
+const composerHint = computed(() => `${msg.value.trim().length}/${composerMaxLen}`)
+const hasMessages = computed(() => groupedMessages.value.length > 0)
 
 const STATUS_STEPS = ['placed', 'accepted', 'ready', 'picked_up'] as const
 const STATUS_LABELS: Record<string, string> = {
@@ -170,24 +193,26 @@ onMounted(() => {
       return
     }
 
-    // ── Demo mode ────────────────────────────────────────────────────────────
     if (demoMode) {
       const demoOrder = getDemoOrderById(id.value)
       if (!demoOrder) {
         loadError.value = 'Order not found.'
         loading.value = false
+        messagesLoading.value = false
         return
       }
       order.value = demoOrder as any
       messages.value = getDemoMessages(id.value).map((m) => ({ ...m })) as any
+      messagesLoading.value = false
+      messagesError.value = ''
       loading.value = false
       return
     }
 
-    // ── Firebase mode ────────────────────────────────────────────────────────
     if (!firebaseConfigured || !db) {
       loadError.value = 'Firebase is not configured yet.'
       loading.value = false
+      messagesLoading.value = false
       return
     }
 
@@ -215,8 +240,13 @@ onMounted(() => {
       msgsQ,
       (snap) => {
         messages.value = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Message) }))
+        messagesLoading.value = false
+        messagesError.value = ''
       },
-      () => {},
+      () => {
+        messagesLoading.value = false
+        messagesError.value = 'Could not load messages. Check your connection.'
+      },
     )
   })()
 })
@@ -226,10 +256,47 @@ onBeforeUnmount(() => {
   stopMsgs?.()
 })
 
+function updateScrollState() {
+  const el = streamEl.value
+  if (!el) return
+  const near = isNearBottom(el.scrollTop, el.clientHeight, el.scrollHeight)
+  wasNearBottom.value = near
+  showJumpToLatest.value = !near
+}
+
+async function scrollToLatest(force = false) {
+  const el = streamEl.value
+  if (!el) return
+  if (!force && !wasNearBottom.value) return
+  await nextTick()
+  el.scrollTop = el.scrollHeight
+  updateScrollState()
+}
+
+watch(
+  () => messages.value.length,
+  async (nextCount, prevCount) => {
+    const should = shouldAutoScrollOnAppend(
+      wasNearBottom.value,
+      !hadInitialAutoScroll.value,
+      prevCount > 0,
+      nextCount > prevCount,
+    )
+    if (should) await scrollToLatest(true)
+    hadInitialAutoScroll.value = true
+  },
+)
+
 async function send() {
+  const check = validateComposerInput(msg.value, composerMaxLen)
+  if (!check.ok) {
+    composerError.value = check.reason
+    return
+  }
   const text = msg.value.trim()
-  if (!text || !user.value) return
+  if (!user.value) return
   sending.value = true
+  composerError.value = ''
   try {
     if (demoMode) {
       const updated = addDemoMessage(id.value, { senderUid: user.value.uid, text })
@@ -245,9 +312,16 @@ async function send() {
     })
     msg.value = ''
   } catch {
-    // keep it simple
+    composerError.value = 'Could not send message. Please retry.'
   } finally {
     sending.value = false
+  }
+}
+
+function handleComposerKeydown(e: KeyboardEvent) {
+  if (shouldSendOnEnter(e.key, e.shiftKey)) {
+    e.preventDefault()
+    void send()
   }
 }
 </script>
@@ -266,7 +340,6 @@ async function send() {
     <div v-else-if="loading" class="notice muted">Loading order...</div>
 
     <template v-else-if="order">
-      <!-- Status timeline -->
       <section class="panel status-panel">
         <div class="status-header">
           <h2 class="panel-title" style="margin:0">Order Status</h2>
@@ -289,7 +362,7 @@ async function send() {
         <div v-if="isVendorView && nextStatus" class="advance-row">
           <div v-if="advanceError" class="adv-error">{{ advanceError }}</div>
           <button class="btn primary" :disabled="advancing" @click="advanceStatus">
-            {{ advancing ? 'Updating…' : STATUS_NEXT_LABEL[order.status] }}
+            {{ advancing ? 'Updating...' : STATUS_NEXT_LABEL[order.status] }}
           </button>
         </div>
       </section>
@@ -332,22 +405,57 @@ async function send() {
         </section>
       </div>
 
-      <section class="panel chat">
-        <h2 class="panel-title">Chat</h2>
-        <div class="messages">
-          <div class="msg" v-for="m in messages" :key="m.id" :class="{ mine: user?.uid === m.senderUid }">
-            <div class="bubble">
-              <div class="text">{{ m.text }}</div>
-              <div class="time muted">{{ fmtDate(m.createdAt) }}</div>
-            </div>
+      <section class="panel chat" aria-label="Direct messages">
+        <div class="chat-head">
+          <div>
+            <h2 class="panel-title">Direct Messages</h2>
+            <p class="chat-sub">{{ chatRoleLabel }} · {{ chatPeerLabel }} conversation for pickup details</p>
+          </div>
+          <div class="chat-badges">
+            <span class="chat-badge">{{ chatOnlineLabel }}</span>
+            <span class="chat-badge">Order {{ order.checkoutId }}</span>
           </div>
         </div>
 
+        <div v-if="messagesError" class="notice error">{{ messagesError }}</div>
+        <div v-else-if="messagesLoading" class="messages loading" aria-live="polite">
+          <div class="skeleton" v-for="i in 3" :key="`sk-${i}`"></div>
+        </div>
+        <div v-else-if="!hasMessages" class="empty-chat">
+          <p class="muted">No messages yet. Start with pickup timing or arrival instructions.</p>
+        </div>
+        <div v-else ref="streamEl" class="messages" role="log" aria-live="polite" @scroll="updateScrollState">
+          <div
+            v-for="m in groupedMessages"
+            :key="m.id"
+            class="msg"
+            :class="{ mine: m.mine, 'group-start': m.groupStart, 'group-end': m.groupEnd }"
+          >
+            <div class="bubble">
+              <div class="text">{{ m.text }}</div>
+              <div v-if="m.showTimestamp" class="time muted">{{ fmtDate(m.createdAt) }}</div>
+            </div>
+          </div>
+        </div>
+        <button v-if="showJumpToLatest" class="jump-latest" type="button" @click="scrollToLatest(true)">Jump to latest</button>
+
         <form class="composer" @submit.prevent="send">
-          <input v-model="msg" type="text" placeholder="Message…" />
-          <button class="btn primary" type="submit" :disabled="sending || !msg.trim()">
-            Send
-          </button>
+          <label class="sr-only" for="order-dm-input">Message {{ chatPeerLabel.toLowerCase() }}</label>
+          <textarea
+            id="order-dm-input"
+            v-model="msg"
+            rows="2"
+            maxlength="500"
+            placeholder="Message about pickup details..."
+            @keydown="handleComposerKeydown"
+          />
+          <div class="composer-meta">
+            <p class="muted small">{{ composerHint }} · Enter to send, Shift+Enter for new line</p>
+            <button class="btn primary" type="submit" :disabled="!canSend">
+              {{ sending ? 'Sending...' : 'Send' }}
+            </button>
+          </div>
+          <p v-if="composerError" class="compose-error">{{ composerError }}</p>
         </form>
       </section>
     </template>
@@ -365,28 +473,19 @@ async function send() {
 
 .notice { border-radius: 12px; padding: 10px 12px; border: 1px solid; margin: 10px 0; }
 .notice.error { border-color: rgba(255,50,50,0.35); color: var(--danger); background: rgba(255,50,50,0.06); }
-.notice.muted { border-color: rgba(156, 255, 0, 0.12); color: var(--muted); background: rgba(255,255,255,0.02); }
+.notice.muted { border-color: rgba(var(--accent-rgb), 0.12); color: var(--muted); background: rgba(255,255,255,0.02); }
 
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
 @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
 
-.panel { border: 1px solid rgba(156, 255, 0, 0.12); border-radius: 16px; padding: 16px; background: rgba(255,255,255,0.02); }
+.panel { border: 1px solid rgba(var(--accent-rgb), 0.12); border-radius: 16px; padding: 16px; background: rgba(255,255,255,0.02); }
 .panel-title { margin: 0 0 12px; color: var(--text); font-size: 1.05rem; }
 .link { color: var(--accent); text-decoration: none; font-weight: 900; }
 .link:hover { text-decoration: underline; text-underline-offset: 2px; }
 
 .items { display: grid; gap: 10px; }
-.item {
-  display: grid;
-  grid-template-columns: 64px 1fr auto;
-  gap: 12px;
-  align-items: center;
-  padding: 10px;
-  border-radius: 14px;
-  border: 1px solid rgba(255,255,255,0.06);
-  background: rgba(255,255,255,0.02);
-}
-.thumb { width: 64px; height: 48px; border-radius: 12px; object-fit: cover; border: 1px solid rgba(156, 255, 0, 0.10); }
+.item { display: grid; grid-template-columns: 64px 1fr auto; gap: 12px; align-items: center; padding: 10px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); }
+.thumb { width: 64px; height: 48px; border-radius: 12px; object-fit: cover; border: 1px solid rgba(var(--accent-rgb), 0.10); }
 .meta { min-width: 0; }
 .name { color: var(--text); font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .line { font-weight: 900; color: var(--text); }
@@ -396,71 +495,21 @@ async function send() {
 .k { color: var(--muted); font-size: 0.82rem; }
 .v { color: var(--text); font-weight: 700; }
 
-/* Status timeline */
 .status-panel { margin-bottom: 16px; }
 .status-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
-
-.status-chip {
-  font-size: 0.78rem;
-  font-weight: 800;
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(156, 255, 0, 0.25);
-  color: var(--accent);
-  background: rgba(156, 255, 0, 0.06);
-  white-space: nowrap;
-}
-.status-chip.placed   { border-color: rgba(100,180,255,0.3); color: #7ecfff; background: rgba(100,180,255,0.07); }
-.status-chip.accepted { border-color: rgba(255,180,0,0.3);   color: #f5a623; background: rgba(255,180,0,0.07); }
-.status-chip.ready    { border-color: rgba(156,255,0,0.3);   color: var(--accent); background: rgba(156,255,0,0.07); }
+.status-chip { font-size: 0.78rem; font-weight: 800; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(var(--accent-rgb), 0.25); color: var(--accent); background: rgba(var(--accent-rgb), 0.06); white-space: nowrap; }
+.status-chip.placed { border-color: rgba(100,180,255,0.3); color: #7ecfff; background: rgba(100,180,255,0.07); }
+.status-chip.accepted { border-color: rgba(255,180,0,0.3); color: #f5a623; background: rgba(255,180,0,0.07); }
+.status-chip.ready { border-color: rgba(var(--accent-rgb),0.3); color: var(--accent); background: rgba(var(--accent-rgb),0.07); }
 .status-chip.picked_up { border-color: rgba(80,220,120,0.3); color: var(--success); background: rgba(80,220,120,0.07); }
 
-.timeline {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0;
-  padding-bottom: 6px;
-}
-.step-line {
-  position: absolute;
-  top: 11px;
-  left: 12.5%;
-  right: 12.5%;
-  height: 2px;
-  background: rgba(255,255,255,0.08);
-  z-index: 0;
-}
-.step {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-.step-dot {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.15);
-  background: var(--card);
-  transition: background 0.2s, border-color 0.2s;
-}
-.step.done .step-dot {
-  border-color: var(--accent);
-  background: rgba(156, 255, 0, 0.18);
-}
-.step.active .step-dot {
-  border-color: var(--accent);
-  background: var(--accent);
-}
-.step-label {
-  font-size: 0.72rem;
-  color: var(--muted);
-  text-align: center;
-  line-height: 1.3;
-}
+.timeline { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; padding-bottom: 6px; }
+.step-line { position: absolute; top: 11px; left: 12.5%; right: 12.5%; height: 2px; background: rgba(255,255,255,0.08); z-index: 0; }
+.step { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.step-dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.15); background: var(--card); transition: background 0.2s, border-color 0.2s; }
+.step.done .step-dot { border-color: var(--accent); background: rgba(var(--accent-rgb), 0.18); }
+.step.active .step-dot { border-color: var(--accent); background: var(--accent); }
+.step-label { font-size: 0.72rem; color: var(--muted); text-align: center; line-height: 1.3; }
 .step.done .step-label { color: var(--text); font-weight: 700; }
 .step.active .step-label { color: var(--accent); font-weight: 900; }
 
@@ -468,42 +517,44 @@ async function send() {
 .adv-error { font-size: 0.85rem; color: var(--danger); }
 
 .chat { margin-top: 16px; }
-.messages { max-height: 320px; overflow: auto; display: grid; gap: 8px; padding: 4px; }
+.chat-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+.chat-sub { margin: 4px 0 0; color: var(--muted); font-size: 0.8rem; }
+.chat-badges { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.chat-badge { font-size: 0.72rem; color: var(--text); border: 1px solid rgba(var(--accent-rgb), 0.2); background: rgba(var(--accent-rgb), 0.08); border-radius: 999px; padding: 3px 9px; }
+
+.messages { max-height: 340px; overflow: auto; display: grid; gap: 6px; padding: 6px; border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; }
+.messages.loading { gap: 10px; }
+.skeleton { height: 42px; border-radius: 10px; background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.08), rgba(255,255,255,0.04)); background-size: 200% 100%; animation: pulse 1.2s infinite; }
 .msg { display: flex; }
 .msg.mine { justify-content: flex-end; }
-.bubble {
-  max-width: 78ch;
-  border: 1px solid rgba(255,255,255,0.06);
-  background: rgba(255,255,255,0.02);
-  border-radius: 14px;
-  padding: 10px 12px;
-}
-.msg.mine .bubble { border-color: rgba(156, 255, 0, 0.22); background: rgba(156, 255, 0, 0.06); }
+.bubble { max-width: min(74ch, 88%); border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); border-radius: 14px; padding: 10px 12px; }
+.msg.mine .bubble { border-color: rgba(var(--accent-rgb), 0.22); background: rgba(var(--accent-rgb), 0.06); }
 .text { color: var(--text); white-space: pre-wrap; }
 .time { margin-top: 6px; font-size: 0.72rem; }
+.empty-chat { border: 1px dashed rgba(255,255,255,0.14); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+.jump-latest { margin-top: 8px; align-self: flex-end; font-size: 0.78rem; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); color: var(--muted); background: var(--surface-1); cursor: pointer; transition: color 0.15s, background 0.15s; }
+.jump-latest:hover { color: var(--text); background: var(--surface-2); }
 
-.composer { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin-top: 12px; }
-.composer input {
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--card);
-  color: var(--text);
-  font-size: 0.95rem;
-}
+.composer { display: grid; gap: 8px; margin-top: 12px; position: sticky; bottom: 0; background: linear-gradient(180deg, rgba(22,27,23,0.0), rgba(22,27,23,0.92) 28%); padding-top: 8px; }
+.composer textarea { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 0.95rem; min-height: 44px; max-height: 140px; resize: vertical; }
+.composer textarea:focus { outline: none; border-color: rgba(var(--accent-rgb), 0.42); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12); }
+.composer-meta { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.compose-error { margin: 0; color: var(--danger); font-size: 0.82rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
 
-.btn {
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(156, 255, 0, 0.15);
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  font-weight: 900;
-  text-decoration: none;
-  height: 42px;
-}
+.btn { padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(var(--accent-rgb), 0.15); background: transparent; color: var(--text); cursor: pointer; font-weight: 900; text-decoration: none; min-height: 42px; }
 .btn.primary { background: var(--accent); border-color: transparent; color: #0b1205; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-</style>
 
+@media (max-width: 700px) {
+  .messages { max-height: 44vh; }
+  .bubble { max-width: 92%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+@keyframes pulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+</style>

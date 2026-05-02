@@ -1,0 +1,32 @@
+{
+  "asics": {
+    "avgPrice": 121,
+    "totalOrders": 5132,
+    "topCategory": "Basketball"
+  },
+  "reebok": {
+    "avgPrice": 120,
+    "totalOrders": 5026,
+    "topCategory": "Basketball"
+  },
+  "nike": {
+    "avgPrice": 121,
+    "totalOrders": 5018,
+    "topCategory": "Training"
+  },
+  "new balance": {
+    "avgPrice": 121,
+    "totalOrders": 4982,
+    "topCategory": "Training"
+  },
+  "adidas": {
+    "avgPrice": 121,
+    "totalOrders": 4918,
+    "topCategory": "Lifestyle"
+  },
+  "puma": {
+    "avgPrice": 121,
+    "totalOrders": 4924,
+    "topCategory": "Lifestyle"
+  }
+}
