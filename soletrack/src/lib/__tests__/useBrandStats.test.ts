@@ -4,6 +4,9 @@ import { getBrandStat, getDelta, __resetBrandStatsForTests } from '../useBrandSt
 const MOCK_STATS = {
   nike: { avgPrice: 187, totalOrders: 100, topCategory: 'Running' },
   adidas: { avgPrice: 150, totalOrders: 80, topCategory: 'Lifestyle' },
+  jordan: { avgPrice: 285, totalOrders: 4103, topCategory: 'Basketball' },
+  yeezy: { avgPrice: 312, totalOrders: 2847, topCategory: 'Lifestyle' },
+  converse: { avgPrice: 72, totalOrders: 3614, topCategory: 'Lifestyle' },
 }
 
 describe('useBrandStats', () => {
@@ -43,20 +46,20 @@ describe('useBrandStats', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
-  it('Jordan alias resolves to Nike stats', async () => {
-    await expect(getBrandStat('Jordan')).resolves.toEqual(MOCK_STATS.nike)
+  it('getBrandStat returns Jordan stat directly', async () => {
+    await expect(getBrandStat('Jordan')).resolves.toEqual(MOCK_STATS.jordan)
   })
 
-  it('Yeezy alias resolves to Adidas stats', async () => {
-    await expect(getBrandStat('Yeezy')).resolves.toEqual(MOCK_STATS.adidas)
+  it('getBrandStat returns Yeezy stat directly', async () => {
+    await expect(getBrandStat('Yeezy')).resolves.toEqual(MOCK_STATS.yeezy)
   })
 
-  it('Converse alias resolves to Nike stats', async () => {
-    await expect(getBrandStat('Converse')).resolves.toEqual(MOCK_STATS.nike)
+  it('getBrandStat returns Converse stat directly', async () => {
+    await expect(getBrandStat('Converse')).resolves.toEqual(MOCK_STATS.converse)
   })
 
-  it('getDelta works for aliased brand Jordan', async () => {
-    // Jordan maps to Nike avg 187, 220 is 17.6% above
-    await expect(getDelta(220, 'Jordan')).resolves.toBe(17.6)
+  it('getDelta works for Jordan using Jordan avg price', async () => {
+    // Jordan avg 285, listing 350 → 22.8% above
+    await expect(getDelta(350, 'Jordan')).resolves.toBe(22.8)
   })
 })

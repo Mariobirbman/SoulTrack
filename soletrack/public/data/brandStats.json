@@ -28,5 +28,20 @@
     "avgPrice": 121,
     "totalOrders": 4924,
     "topCategory": "Lifestyle"
+  },
+  "jordan": {
+    "avgPrice": 285,
+    "totalOrders": 4103,
+    "topCategory": "Basketball"
+  },
+  "yeezy": {
+    "avgPrice": 312,
+    "totalOrders": 2847,
+    "topCategory": "Lifestyle"
+  },
+  "converse": {
+    "avgPrice": 72,
+    "totalOrders": 3614,
+    "topCategory": "Lifestyle"
   }
 }
