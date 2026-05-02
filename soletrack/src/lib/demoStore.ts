@@ -335,6 +335,7 @@ export type DemoOrder = {
   notes?: string
   items: DemoOrderItem[]
   subtotal: number
+  agreedPrice?: number
   createdAt: string // ISO string
 }
 
@@ -343,6 +344,8 @@ export type DemoMessage = {
   senderUid: string
   text: string
   createdAt: string // ISO string
+  type?: 'text' | 'price_proposal' | 'price_locked' | 'price_declined'
+  proposedPrice?: number
 }
 
 export function getDemoOrders(): DemoOrder[] {
@@ -422,8 +425,11 @@ export function getDemoOrderById(id: string): DemoOrder | null {
 
 export function addDemoOrder(order: Omit<DemoOrder, 'id' | 'createdAt'>): DemoOrder {
   const current = getDemoOrders()
+  // All demo vendor UIDs route to the demo seller so orders appear in the seller's order list
+  const vendorUid = order.vendorUid.startsWith('__demo__') ? DEMO_SELLER_UID : order.vendorUid
   const newOrder: DemoOrder = {
     ...order,
+    vendorUid,
     id: `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     createdAt: new Date().toISOString(),
   }
@@ -436,14 +442,25 @@ function upsertDemoSalesFromPickedUpOrder(orderId: string, order: DemoOrder) {
   const withoutCurrentOrder = current.filter((s) => !(s.source === 'order' && s.orderId === orderId))
   const soldDate = new Date().toISOString().slice(0, 10)
 
+  const originalSubtotal = order.items.reduce(
+    (a, item) => a + (Number(item.priceSnapshot) || 0) * Math.max(1, Number(item.qty) || 1),
+    0,
+  )
+  const orderTotal = Number(order.agreedPrice ?? order.subtotal) || originalSubtotal
+
   const orderSales: DemoSale[] = order.items.map((item, index) => {
     const qty = Math.max(1, Number(item.qty) || 1)
+    const itemOriginal = (Number(item.priceSnapshot) || 0) * qty
+    const sellPrice =
+      originalSubtotal > 0
+        ? Math.round((itemOriginal / originalSubtotal) * orderTotal * 100) / 100
+        : itemOriginal
     return {
       id: `sale-order-${orderId}-${index}`,
       shoe: item.nameSnapshot || 'Shoe',
       size: '-',
       buyPrice: null,
-      sellPrice: (Number(item.priceSnapshot) || 0) * qty,
+      sellPrice,
       date: soldDate,
       platform: 'Pickup',
       qty,
@@ -490,6 +507,15 @@ export function updateDemoOrderStatus(id: string, status: string): DemoOrder | n
   }
 
   return updatedOrder
+}
+
+export function updateDemoOrderPrice(orderId: string, agreedPrice: number): DemoOrder | null {
+  const current = getDemoOrders()
+  const target = current.find((o) => o.id === orderId)
+  if (!target) return null
+  const updated: DemoOrder = { ...target, agreedPrice }
+  saveDemoOrders(current.map((o) => (o.id === orderId ? updated : o)))
+  return updated
 }
 
 // ─── Demo Chat Messages ───────────────────────────────────────────────────────

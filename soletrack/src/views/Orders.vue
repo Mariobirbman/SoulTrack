@@ -7,18 +7,7 @@ import { db, demoMode, firebaseConfigured } from '@/lib/firebase'
 import { isDemoBuyer } from '@/lib/demo'
 import { getDemoBuyerOrders, getDemoVendorOrders } from '@/lib/demoStore'
 
-type VendorOrder = {
-  checkoutId: string
-  status: string
-  buyerUid: string
-  buyerEmail?: string
-  vendorUid: string
-  vendorName?: string
-  pickupName?: string
-  pickupPreferredDateTime?: string
-  createdAt?: any
-  subtotal?: number
-}
+import type { VendorOrder } from '@/lib/orderTypes'
 
 const route = useRoute()
 const highlightCheckoutId = computed(() => (typeof route.query.checkoutId === 'string' ? route.query.checkoutId : ''))

@@ -15,41 +15,24 @@ import {
 import { useAuth } from '@/lib/auth'
 import { db, demoMode, firebaseConfigured } from '@/lib/firebase'
 import {
+  computeItemSellPrice,
+  findActiveProposal,
   groupMessages,
   isNearBottom,
   shouldAutoScrollOnAppend,
   shouldSendOnEnter,
   validateComposerInput,
+  type ChatMessage,
   type GroupedChatMessage,
 } from '@/lib/orderChat'
+import type { VendorOrder } from '@/lib/orderTypes'
 import {
   addDemoMessage,
   getDemoMessages,
   getDemoOrderById,
+  updateDemoOrderPrice,
   updateDemoOrderStatus,
 } from '@/lib/demoStore'
-
-type VendorOrder = {
-  checkoutId: string
-  status: string
-  buyerUid: string
-  buyerEmail?: string | null
-  vendorUid: string
-  vendorName?: string
-  pickupName?: string
-  pickupEmail?: string
-  pickupPreferredDateTime?: string
-  notes?: string
-  items: Array<{ productId: string; nameSnapshot: string; priceSnapshot: number; qty: number; image?: string | null }>
-  createdAt?: any
-  subtotal?: number
-}
-
-type Message = {
-  senderUid: string
-  text: string
-  createdAt?: any
-}
 
 const route = useRoute()
 const router = useRouter()
@@ -60,7 +43,7 @@ const loading = ref(true)
 const loadError = ref('')
 const order = ref<VendorOrder | null>(null)
 
-const messages = ref<Array<{ id: string } & Message>>([])
+const messages = ref<Array<{ id: string } & ChatMessage>>([])
 const msg = ref('')
 const sending = ref(false)
 const messagesLoading = ref(true)
@@ -71,6 +54,14 @@ const streamEl = ref<HTMLElement | null>(null)
 const showJumpToLatest = ref(false)
 const wasNearBottom = ref(true)
 const hadInitialAutoScroll = ref(false)
+
+// ── Price negotiation state ───────────────────────────────────────────────────
+const showPriceInput = ref(false)
+const priceInput = ref('')
+const proposing = ref(false)
+const accepting = ref(false)
+const declining = ref(false)
+const proposeError = ref('')
 
 let stopOrder: (() => void) | null = null
 let stopMsgs: (() => void) | null = null
@@ -101,6 +92,19 @@ const canSend = computed(() => validateComposerInput(msg.value, composerMaxLen).
 const composerHint = computed(() => `${msg.value.trim().length}/${composerMaxLen}`)
 const hasMessages = computed(() => groupedMessages.value.length > 0)
 
+// Price negotiation can only happen while order is placed or accepted (not after ready/picked_up)
+const canNegotiate = computed(() => {
+  const s = order.value?.status
+  return s === 'placed' || s === 'accepted'
+})
+
+const activeProposal = computed(() => findActiveProposal(messages.value))
+
+const effectivePrice = computed(() =>
+  order.value ? (order.value.agreedPrice ?? Number(order.value.subtotal) ?? 0) : 0,
+)
+const priceWasNegotiated = computed(() => order.value?.agreedPrice != null)
+
 const STATUS_STEPS = ['placed', 'accepted', 'ready', 'picked_up'] as const
 const STATUS_LABELS: Record<string, string> = {
   placed: 'Order Placed',
@@ -126,14 +130,22 @@ async function markPickedUpAndLogSales(orderId: string, currentOrder: VendorOrde
   const batch = writeBatch(firestore)
   const soldDate = new Date().toISOString().slice(0, 10)
 
+  const originalSubtotal = currentOrder.items.reduce(
+    (a, item) => a + (Number(item.priceSnapshot) || 0) * Math.max(1, Number(item.qty) || 1),
+    0,
+  )
+  const orderTotal = Number(currentOrder.agreedPrice ?? currentOrder.subtotal) || originalSubtotal
+
   currentOrder.items.forEach((item, index) => {
     const qty = Math.max(1, Number(item.qty) || 1)
+    const sellPrice = computeItemSellPrice(Number(item.priceSnapshot) || 0, qty, originalSubtotal, orderTotal)
+
     const saleRef = doc(firestore, 'users', vendorUid, 'sales', `order-${orderId}-${index}`)
     batch.set(saleRef, {
       shoe: item.nameSnapshot || 'Shoe',
       size: '-',
       buyPrice: null,
-      sellPrice: (Number(item.priceSnapshot) || 0) * qty,
+      sellPrice,
       date: soldDate,
       platform: 'Pickup',
       qty,
@@ -184,6 +196,119 @@ async function advanceStatus() {
     advancing.value = false
   }
 }
+
+// ── Price negotiation functions ───────────────────────────────────────────────
+
+async function sendProposal() {
+  const price = parseFloat(priceInput.value)
+  if (!price || price <= 0 || price > 10000) {
+    proposeError.value = 'Enter a valid price between $1 and $10,000.'
+    return
+  }
+  if (!user.value) return
+  proposing.value = true
+  proposeError.value = ''
+  const proposedPrice = Math.round(price * 100) / 100
+  const text = `Proposed price: ${fmtUSD(proposedPrice)}`
+  try {
+    if (demoMode) {
+      const updated = addDemoMessage(id.value, {
+        senderUid: user.value.uid,
+        text,
+        type: 'price_proposal',
+        proposedPrice,
+      })
+      messages.value = updated.map((m) => ({ ...m })) as any
+      showPriceInput.value = false
+      priceInput.value = ''
+      return
+    }
+    if (!firebaseConfigured || !db) return
+    await addDoc(collection(db, 'vendorOrders', id.value, 'messages'), {
+      senderUid: user.value.uid,
+      text,
+      type: 'price_proposal',
+      proposedPrice,
+      createdAt: serverTimestamp(),
+    })
+    showPriceInput.value = false
+    priceInput.value = ''
+  } catch {
+    proposeError.value = 'Could not send proposal. Please retry.'
+  } finally {
+    proposing.value = false
+  }
+}
+
+async function acceptProposal(proposal: { id: string } & ChatMessage) {
+  if (!proposal.proposedPrice || !user.value || !order.value) return
+  accepting.value = true
+  proposeError.value = ''
+  const price = proposal.proposedPrice
+  try {
+    if (demoMode) {
+      updateDemoOrderPrice(id.value, price)
+      order.value = { ...order.value, agreedPrice: price }
+      const updated = addDemoMessage(id.value, {
+        senderUid: user.value.uid,
+        text: `Price locked at ${fmtUSD(price)}`,
+        type: 'price_locked',
+        proposedPrice: price,
+      })
+      messages.value = updated.map((m) => ({ ...m })) as any
+      return
+    }
+    if (!firebaseConfigured || !db) return
+    await updateDoc(doc(db, 'vendorOrders', id.value), {
+      agreedPrice: price,
+      updatedAt: serverTimestamp(),
+    })
+    await addDoc(collection(db, 'vendorOrders', id.value, 'messages'), {
+      senderUid: user.value.uid,
+      text: `Price locked at ${fmtUSD(price)}`,
+      type: 'price_locked',
+      proposedPrice: price,
+      createdAt: serverTimestamp(),
+    })
+  } catch {
+    proposeError.value = 'Could not accept proposal. Please retry.'
+  } finally {
+    accepting.value = false
+  }
+}
+
+async function declineProposal(proposal: { id: string } & ChatMessage) {
+  if (!proposal.proposedPrice || !user.value) return
+  declining.value = true
+  proposeError.value = ''
+  const price = proposal.proposedPrice
+  try {
+    if (demoMode) {
+      const updated = addDemoMessage(id.value, {
+        senderUid: user.value.uid,
+        text: `Declined ${fmtUSD(price)}`,
+        type: 'price_declined',
+        proposedPrice: price,
+      })
+      messages.value = updated.map((m) => ({ ...m })) as any
+      return
+    }
+    if (!firebaseConfigured || !db) return
+    await addDoc(collection(db, 'vendorOrders', id.value, 'messages'), {
+      senderUid: user.value.uid,
+      text: `Declined ${fmtUSD(price)}`,
+      type: 'price_declined',
+      proposedPrice: price,
+      createdAt: serverTimestamp(),
+    })
+  } catch {
+    proposeError.value = 'Could not decline proposal. Please retry.'
+  } finally {
+    declining.value = false
+  }
+}
+
+// ── Chat / lifecycle ──────────────────────────────────────────────────────────
 
 onMounted(() => {
   ;(async () => {
@@ -239,7 +364,7 @@ onMounted(() => {
     stopMsgs = onSnapshot(
       msgsQ,
       (snap) => {
-        messages.value = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Message) }))
+        messages.value = snap.docs.map((d) => ({ id: d.id, ...(d.data() as ChatMessage) }))
         messagesLoading.value = false
         messagesError.value = ''
       },
@@ -365,6 +490,15 @@ function handleComposerKeydown(e: KeyboardEvent) {
             {{ advancing ? 'Updating...' : STATUS_NEXT_LABEL[order.status] }}
           </button>
         </div>
+
+        <div v-if="order.status === 'picked_up'" class="sold-confirm">
+          <span class="sold-icon">✓</span>
+          <div>
+            <div class="sold-title">Sale logged — {{ fmtUSD(effectivePrice) }}</div>
+            <div class="sold-sub muted small">Recorded in your sales history</div>
+          </div>
+          <router-link class="btn sold-link" to="/account">View Sales</router-link>
+        </div>
       </section>
 
       <div class="grid">
@@ -381,8 +515,11 @@ function handleComposerKeydown(e: KeyboardEvent) {
             </div>
           </div>
           <div class="sum">
-            <span class="muted">Subtotal</span>
-            <strong>{{ fmtUSD(Number(order.subtotal) || 0) }}</strong>
+            <span class="muted">{{ priceWasNegotiated ? 'Agreed Price' : 'Subtotal' }}</span>
+            <strong :class="{ 'price-agreed': priceWasNegotiated }">{{ fmtUSD(effectivePrice) }}</strong>
+          </div>
+          <div v-if="priceWasNegotiated" class="negotiated-note muted small">
+            Negotiated · Original: {{ fmtUSD(Number(order.subtotal) || 0) }}
           </div>
         </section>
 
@@ -431,7 +568,43 @@ function handleComposerKeydown(e: KeyboardEvent) {
             class="msg"
             :class="{ mine: m.mine, 'group-start': m.groupStart, 'group-end': m.groupEnd }"
           >
-            <div class="bubble">
+            <!-- Price proposal bubble -->
+            <div v-if="m.type === 'price_proposal'" class="bubble proposal-bubble" :class="{ mine: m.mine }">
+              <div class="proposal-label">Price Proposal</div>
+              <div class="proposal-price">{{ fmtUSD(m.proposedPrice ?? 0) }}</div>
+              <div v-if="!m.mine && activeProposal?.id === m.id" class="proposal-actions">
+                <button
+                  class="btn accept-btn"
+                  :disabled="accepting || declining"
+                  @click="acceptProposal(m)"
+                >{{ accepting ? '…' : 'Accept' }}</button>
+                <button
+                  class="btn decline-btn"
+                  :disabled="accepting || declining"
+                  @click="declineProposal(m)"
+                >{{ declining ? '…' : 'Decline' }}</button>
+              </div>
+              <div v-else-if="m.mine && activeProposal?.id === m.id" class="proposal-pending muted small">
+                Awaiting response…
+              </div>
+              <div v-if="m.showTimestamp" class="time muted">{{ fmtDate(m.createdAt) }}</div>
+            </div>
+
+            <!-- Price locked bubble -->
+            <div v-else-if="m.type === 'price_locked'" class="bubble locked-bubble">
+              <div class="locked-label">Price Agreed</div>
+              <div class="locked-price">{{ fmtUSD(m.proposedPrice ?? 0) }}</div>
+              <div v-if="m.showTimestamp" class="time muted">{{ fmtDate(m.createdAt) }}</div>
+            </div>
+
+            <!-- Price declined bubble -->
+            <div v-else-if="m.type === 'price_declined'" class="bubble declined-bubble">
+              <div class="muted small">Offer declined: {{ fmtUSD(m.proposedPrice ?? 0) }}</div>
+              <div v-if="m.showTimestamp" class="time muted">{{ fmtDate(m.createdAt) }}</div>
+            </div>
+
+            <!-- Regular text bubble -->
+            <div v-else class="bubble">
               <div class="text">{{ m.text }}</div>
               <div v-if="m.showTimestamp" class="time muted">{{ fmtDate(m.createdAt) }}</div>
             </div>
@@ -440,6 +613,35 @@ function handleComposerKeydown(e: KeyboardEvent) {
         <button v-if="showJumpToLatest" class="jump-latest" type="button" @click="scrollToLatest(true)">Jump to latest</button>
 
         <form class="composer" @submit.prevent="send">
+          <!-- Price proposal controls (above textarea, only during negotiable statuses) -->
+          <div v-if="canNegotiate" class="propose-area">
+            <div v-if="!showPriceInput" class="propose-trigger">
+              <button class="btn propose-btn" type="button" @click="showPriceInput = true">$ Propose Price</button>
+            </div>
+            <template v-else>
+              <div class="propose-input-row">
+                <span class="dollar-sign">$</span>
+                <label class="sr-only" for="propose-price-input">Proposed price</label>
+                <input
+                  id="propose-price-input"
+                  v-model="priceInput"
+                  type="number"
+                  min="1"
+                  max="10000"
+                  step="0.01"
+                  placeholder="0.00"
+                  class="price-input"
+                  @keydown.escape="showPriceInput = false; priceInput = ''"
+                />
+                <button class="btn primary" type="button" :disabled="proposing" @click="sendProposal">
+                  {{ proposing ? 'Sending…' : 'Send' }}
+                </button>
+                <button class="btn" type="button" @click="showPriceInput = false; priceInput = ''">Cancel</button>
+              </div>
+              <p v-if="proposeError" class="compose-error">{{ proposeError }}</p>
+            </template>
+          </div>
+
           <label class="sr-only" for="order-dm-input">Message {{ chatPeerLabel.toLowerCase() }}</label>
           <textarea
             id="order-dm-input"
@@ -490,6 +692,8 @@ function handleComposerKeydown(e: KeyboardEvent) {
 .name { color: var(--text); font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .line { font-weight: 900; color: var(--text); }
 .sum { display: flex; justify-content: space-between; align-items: baseline; margin-top: 12px; }
+.price-agreed { color: var(--success); }
+.negotiated-note { margin-top: 4px; }
 
 .kv { display: grid; grid-template-columns: 130px 1fr; gap: 10px; }
 .k { color: var(--muted); font-size: 0.82rem; }
@@ -516,6 +720,12 @@ function handleComposerKeydown(e: KeyboardEvent) {
 .advance-row { margin-top: 14px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .adv-error { font-size: 0.85rem; color: var(--danger); }
 
+.sold-confirm { margin-top: 14px; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(80,220,120,0.35); background: rgba(80,220,120,0.06); }
+.sold-icon { font-size: 1.2rem; color: var(--success); font-weight: 900; flex-shrink: 0; }
+.sold-title { font-weight: 900; color: var(--success); }
+.sold-sub { margin-top: 2px; }
+.sold-link { margin-left: auto; font-size: 0.85rem; padding: 6px 12px; min-height: unset; border-color: rgba(80,220,120,0.4); color: var(--success); }
+
 .chat { margin-top: 16px; }
 .chat-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
 .chat-sub { margin: 4px 0 0; color: var(--muted); font-size: 0.8rem; }
@@ -535,11 +745,45 @@ function handleComposerKeydown(e: KeyboardEvent) {
 .jump-latest { margin-top: 8px; align-self: flex-end; font-size: 0.78rem; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); color: var(--muted); background: var(--surface-1); cursor: pointer; transition: color 0.15s, background 0.15s; }
 .jump-latest:hover { color: var(--text); background: var(--surface-2); }
 
+/* Proposal bubbles */
+.proposal-bubble { border-color: rgba(245,166,35,0.35); background: rgba(245,166,35,0.06); max-width: min(56ch, 88%); }
+.proposal-label { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #f5a623; margin-bottom: 4px; }
+.proposal-price { font-size: 1.3rem; font-weight: 900; color: var(--text); margin-bottom: 8px; }
+.proposal-actions { display: flex; gap: 8px; margin-bottom: 4px; }
+.proposal-pending { margin-top: 2px; }
+.accept-btn { background: rgba(80,220,120,0.15); border-color: rgba(80,220,120,0.4); color: var(--success); font-size: 0.85rem; padding: 6px 14px; min-height: unset; }
+.accept-btn:hover:not(:disabled) { background: rgba(80,220,120,0.25); }
+.decline-btn { background: rgba(255,50,50,0.08); border-color: rgba(255,50,50,0.3); color: var(--danger); font-size: 0.85rem; padding: 6px 14px; min-height: unset; }
+.decline-btn:hover:not(:disabled) { background: rgba(255,50,50,0.15); }
+
+/* Locked bubble */
+.locked-bubble { border-color: rgba(80,220,120,0.4); background: rgba(80,220,120,0.06); max-width: min(56ch, 88%); }
+.locked-label { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--success); margin-bottom: 4px; }
+.locked-price { font-size: 1.3rem; font-weight: 900; color: var(--success); }
+
+/* Declined bubble */
+.declined-bubble { border-color: rgba(255,255,255,0.06); background: rgba(255,255,255,0.01); opacity: 0.65; max-width: min(56ch, 88%); }
+
+/* Composer */
 .composer { display: grid; gap: 8px; margin-top: 12px; position: sticky; bottom: 0; background: linear-gradient(180deg, rgba(22,27,23,0.0), rgba(22,27,23,0.92) 28%); padding-top: 8px; }
 .composer textarea { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 0.95rem; min-height: 44px; max-height: 140px; resize: vertical; }
 .composer textarea:focus { outline: none; border-color: rgba(var(--accent-rgb), 0.42); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12); }
 .composer-meta { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .compose-error { margin: 0; color: var(--danger); font-size: 0.82rem; }
+
+/* Price propose area */
+.propose-area { border: 1px dashed rgba(245,166,35,0.25); border-radius: 10px; padding: 8px 10px; background: rgba(245,166,35,0.03); }
+.propose-trigger { display: flex; align-items: center; }
+.propose-btn { font-size: 0.85rem; padding: 6px 12px; border-color: rgba(245,166,35,0.35); color: #f5a623; min-height: unset; }
+.propose-btn:hover { background: rgba(245,166,35,0.08); }
+.propose-input-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dollar-sign { color: var(--muted); font-weight: 700; }
+.price-input { width: 110px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 0.95rem; }
+.price-input:focus { outline: none; border-color: rgba(var(--accent-rgb), 0.42); }
+/* Remove number input spinners */
+.price-input::-webkit-inner-spin-button,
+.price-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
 
 .btn { padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(var(--accent-rgb), 0.15); background: transparent; color: var(--text); cursor: pointer; font-weight: 900; text-decoration: none; min-height: 42px; }
@@ -549,6 +793,7 @@ function handleComposerKeydown(e: KeyboardEvent) {
 @media (max-width: 700px) {
   .messages { max-height: 44vh; }
   .bubble { max-width: 92%; }
+  .propose-input-row { flex-direction: column; align-items: flex-start; }
 }
 @media (prefers-reduced-motion: reduce) {
   .skeleton { animation: none; }

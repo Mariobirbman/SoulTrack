@@ -2,11 +2,20 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { getBrandStat, getDelta, __resetBrandStatsForTests } from '../useBrandStats'
 
 const MOCK_STATS = {
-  nike: { avgPrice: 187, totalOrders: 100, topCategory: 'Running' },
-  adidas: { avgPrice: 150, totalOrders: 80, topCategory: 'Lifestyle' },
-  jordan: { avgPrice: 285, totalOrders: 4103, topCategory: 'Basketball' },
-  yeezy: { avgPrice: 312, totalOrders: 2847, topCategory: 'Lifestyle' },
-  converse: { avgPrice: 72, totalOrders: 3614, topCategory: 'Lifestyle' },
+  nike: {
+    avgPrice: 187,
+    totalOrders: 100,
+    topCategory: 'Running',
+    byType: {
+      running: { avgPrice: 220, totalOrders: 50 },
+      basketball: { avgPrice: 170, totalOrders: 30 },
+      lifestyle: { avgPrice: 150, totalOrders: 20 },
+    },
+  },
+  adidas: { avgPrice: 150, totalOrders: 80, topCategory: 'Lifestyle', byType: { lifestyle: { avgPrice: 150, totalOrders: 80 } } },
+  jordan: { avgPrice: 285, totalOrders: 4103, topCategory: 'Basketball', byType: { basketball: { avgPrice: 285, totalOrders: 4103 } } },
+  yeezy: { avgPrice: 312, totalOrders: 2847, topCategory: 'Lifestyle', byType: { lifestyle: { avgPrice: 312, totalOrders: 2847 } } },
+  converse: { avgPrice: 72, totalOrders: 3614, topCategory: 'Lifestyle', byType: { lifestyle: { avgPrice: 72, totalOrders: 3614 } } },
 }
 
 describe('useBrandStats', () => {
@@ -59,7 +68,21 @@ describe('useBrandStats', () => {
   })
 
   it('getDelta works for Jordan using Jordan avg price', async () => {
-    // Jordan avg 285, listing 350 → 22.8% above
+    // Jordan avg 285, listing 350 => 22.8% above
     await expect(getDelta(350, 'Jordan')).resolves.toBe(22.8)
+  })
+
+  it('getBrandStat uses type-specific data when type is provided', async () => {
+    await expect(getBrandStat('Nike', 'Running')).resolves.toEqual({
+      avgPrice: 220,
+      totalOrders: 50,
+      topCategory: 'running',
+      byType: MOCK_STATS.nike.byType,
+    })
+  })
+
+  it('getDelta uses type-specific avg when type is provided', async () => {
+    // Running avg 220, listing 220 => 0%
+    await expect(getDelta(220, 'Nike', 'Running')).resolves.toBe(0)
   })
 })

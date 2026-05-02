@@ -33,6 +33,7 @@ soletrack/devserver.err.log
 
 # Local AI/agent tooling artifacts (keep out of public repo)
 .agent/
+.agents/
 .claude/
 AGENTS.md
 CLAUDE.md
@@ -40,3 +41,7 @@ CLAUDE.md
 codedb.snapshot
 assets/Gemini_Generated_*
 soletrack/src/assets/Gemini_Generated_*
+ROCK/
+awesome-codex-skills/
+impeccable/
+skills-lock.json

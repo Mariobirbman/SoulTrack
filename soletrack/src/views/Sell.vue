@@ -255,8 +255,9 @@ onMounted(() => {
 watch(
   [resolvedBrand, () => Number(productForm.value.price)],
   async ([brand, price]) => {
-    currentBrandStat.value = await getBrandStat(brand)
-    marketDelta.value = await getDelta(price, brand)
+    const typeHint = productForm.value.model.trim()
+    currentBrandStat.value = await getBrandStat(brand, typeHint)
+    marketDelta.value = await getDelta(price, brand, typeHint)
   },
   { immediate: true },
 )

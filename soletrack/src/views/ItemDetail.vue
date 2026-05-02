@@ -79,8 +79,9 @@ watch(
     const demoHit = allDemo.find((p) => p.id === idStr)
     if (demoHit) {
       product.value = demoHit
-      marketStat.value = await getBrandStat(String(demoHit.brand ?? ''))
-      marketDelta.value = await getDelta(Number(demoHit.price ?? 0), String(demoHit.brand ?? ''))
+      const typeHint = String((demoHit as any).category ?? (demoHit as any).model ?? demoHit.name ?? '')
+      marketStat.value = await getBrandStat(String(demoHit.brand ?? ''), typeHint)
+      marketDelta.value = await getDelta(Number(demoHit.price ?? 0), String(demoHit.brand ?? ''), typeHint)
       loading.value = false
       return
     }
@@ -95,8 +96,9 @@ watch(
       const snap = await getDoc(doc(db, 'products', idStr))
       if (snap.exists()) {
         product.value = { id: snap.id, ...snap.data() }
-        marketStat.value = await getBrandStat(String(product.value.brand ?? ''))
-        marketDelta.value = await getDelta(Number(product.value.price ?? 0), String(product.value.brand ?? ''))
+        const typeHint = String(product.value.category ?? product.value.model ?? product.value.name ?? '')
+        marketStat.value = await getBrandStat(String(product.value.brand ?? ''), typeHint)
+        marketDelta.value = await getDelta(Number(product.value.price ?? 0), String(product.value.brand ?? ''), typeHint)
       } else {
         error.value = 'Product not found.'
       }

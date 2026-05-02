@@ -5,19 +5,7 @@ import { useAuth } from '@/lib/auth'
 import { db, demoMode, firebaseConfigured } from '@/lib/firebase'
 import { getDemoVendorOrders } from '@/lib/demoStore'
 
-type VendorOrder = {
-  checkoutId: string
-  status: string
-  buyerUid: string
-  buyerEmail?: string
-  vendorUid: string
-  vendorName?: string
-  pickupName?: string
-  pickupEmail?: string
-  pickupPreferredDateTime?: string
-  createdAt?: any
-  subtotal?: number
-}
+import type { VendorOrder } from '@/lib/orderTypes'
 
 const { user, ready } = useAuth()
 const loading = ref(true)

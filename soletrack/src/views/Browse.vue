@@ -7,7 +7,7 @@ import { useCart } from '@/lib/cart'
 import { useAuth } from '@/lib/auth'
 import { getDelta, loadBrandStats } from '@/lib/useBrandStats'
 import { priceColorClass } from '@/lib/marketIntel'
-import type { DemoProduct } from '@/lib/demoMarketplace'
+import { demoProducts, type DemoProduct } from '@/lib/demoMarketplace'
 import { getOrSeedDemoProducts } from '@/lib/demoStore'
 
 type Product = DemoProduct
@@ -17,6 +17,18 @@ const products = ref<Product[]>([])
 const loading = ref(false)
 const loadError = ref('')
 
+function isActiveListing(p: any) {
+  const status = String(p?.status ?? 'active')
+  return (status === 'approved' || status === 'active') && p?.active !== false
+}
+
+function mergeWithCuratedDemoPhotos(source: Product[]) {
+  const byId = new Map<string, Product>()
+  for (const item of demoProducts as Product[]) byId.set(item.id, item)
+  for (const item of source) byId.set(item.id, item)
+  return Array.from(byId.values())
+}
+
 let stopProductsListener: (() => void) | null = null
 onMounted(async () => {
   try {
@@ -24,11 +36,9 @@ onMounted(async () => {
   } catch {}
   loading.value = true
   if (!firebaseConfigured || !db) {
-    // Demo mode: include active, unsold listings so newly posted demo items appear immediately.
-    products.value = getOrSeedDemoProducts().filter((p: any) => {
-      const status = String(p.status ?? 'active')
-      return (status === 'approved' || status === 'active') && p.active !== false
-    }) as any
+    // Demo mode: include local active listings and the curated demo photo catalog.
+    const local = getOrSeedDemoProducts().filter((p: any) => isActiveListing(p)) as any
+    products.value = mergeWithCuratedDemoPhotos(local)
     loadError.value = ''
     loading.value = false
     return
@@ -38,17 +48,14 @@ onMounted(async () => {
   stopProductsListener = onSnapshot(
     q,
     (snap) => {
-      products.value = snap.docs
+      const live = snap.docs
         .map((d) => ({ id: d.id, ...(d.data() as Omit<Product, 'id'>) }))
-        .filter((p) => {
-          const status = String((p as any).status ?? 'active')
-          return (
-            typeof (p as any).vendorUid === 'string'
-            && (p as any).vendorUid.length > 0
-            && (p as any).active !== false
-            && (status === 'approved' || status === 'active')
-          )
-        })
+        .filter((p) =>
+          typeof (p as any).vendorUid === 'string'
+          && (p as any).vendorUid.length > 0
+          && isActiveListing(p),
+        )
+      products.value = mergeWithCuratedDemoPhotos(live as Product[])
       loadError.value = ''
       loading.value = false
     },
@@ -145,7 +152,8 @@ function profitMargin(p: { price: number; retailPrice?: number }) {
 async function refreshPriceClasses(items: Product[]) {
   const updates = await Promise.all(
     items.map(async (p) => {
-      const delta = await getDelta(p.price, p.brand)
+      const typeHint = String((p as any).category ?? (p as any).model ?? p.name ?? '')
+      const delta = await getDelta(p.price, p.brand, typeHint)
       return [p.id, priceColorClass(delta)] as const
     }),
   )

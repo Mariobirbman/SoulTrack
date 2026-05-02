@@ -2,46 +2,196 @@
   "asics": {
     "avgPrice": 121,
     "totalOrders": 5132,
-    "topCategory": "Basketball"
+    "topCategory": "Basketball",
+    "byType": {
+      "running": {
+        "avgPrice": 121,
+        "totalOrders": 995
+      },
+      "lifestyle": {
+        "avgPrice": 123,
+        "totalOrders": 1052
+      },
+      "gym": {
+        "avgPrice": 121,
+        "totalOrders": 1009
+      },
+      "basketball": {
+        "avgPrice": 118,
+        "totalOrders": 1054
+      },
+      "training": {
+        "avgPrice": 123,
+        "totalOrders": 1022
+      }
+    }
   },
   "reebok": {
     "avgPrice": 120,
     "totalOrders": 5026,
-    "topCategory": "Basketball"
+    "topCategory": "Basketball",
+    "byType": {
+      "lifestyle": {
+        "avgPrice": 121,
+        "totalOrders": 992
+      },
+      "basketball": {
+        "avgPrice": 118,
+        "totalOrders": 1037
+      },
+      "gym": {
+        "avgPrice": 123,
+        "totalOrders": 986
+      },
+      "training": {
+        "avgPrice": 120,
+        "totalOrders": 997
+      },
+      "running": {
+        "avgPrice": 121,
+        "totalOrders": 1014
+      }
+    }
   },
   "nike": {
     "avgPrice": 121,
     "totalOrders": 5018,
-    "topCategory": "Training"
+    "topCategory": "Training",
+    "byType": {
+      "training": {
+        "avgPrice": 121,
+        "totalOrders": 1028
+      },
+      "gym": {
+        "avgPrice": 123,
+        "totalOrders": 983
+      },
+      "lifestyle": {
+        "avgPrice": 121,
+        "totalOrders": 1002
+      },
+      "basketball": {
+        "avgPrice": 121,
+        "totalOrders": 1021
+      },
+      "running": {
+        "avgPrice": 121,
+        "totalOrders": 984
+      }
+    }
   },
   "new balance": {
     "avgPrice": 121,
     "totalOrders": 4982,
-    "topCategory": "Training"
+    "topCategory": "Training",
+    "byType": {
+      "lifestyle": {
+        "avgPrice": 122,
+        "totalOrders": 981
+      },
+      "running": {
+        "avgPrice": 121,
+        "totalOrders": 1026
+      },
+      "training": {
+        "avgPrice": 121,
+        "totalOrders": 1040
+      },
+      "gym": {
+        "avgPrice": 120,
+        "totalOrders": 943
+      },
+      "basketball": {
+        "avgPrice": 119,
+        "totalOrders": 992
+      }
+    }
   },
   "adidas": {
     "avgPrice": 121,
     "totalOrders": 4918,
-    "topCategory": "Lifestyle"
+    "topCategory": "Lifestyle",
+    "byType": {
+      "running": {
+        "avgPrice": 119,
+        "totalOrders": 993
+      },
+      "training": {
+        "avgPrice": 122,
+        "totalOrders": 988
+      },
+      "lifestyle": {
+        "avgPrice": 121,
+        "totalOrders": 1009
+      },
+      "gym": {
+        "avgPrice": 119,
+        "totalOrders": 965
+      },
+      "basketball": {
+        "avgPrice": 123,
+        "totalOrders": 963
+      }
+    }
   },
   "puma": {
     "avgPrice": 121,
     "totalOrders": 4924,
-    "topCategory": "Lifestyle"
+    "topCategory": "Lifestyle",
+    "byType": {
+      "lifestyle": {
+        "avgPrice": 123,
+        "totalOrders": 1023
+      },
+      "running": {
+        "avgPrice": 122,
+        "totalOrders": 971
+      },
+      "gym": {
+        "avgPrice": 120,
+        "totalOrders": 980
+      },
+      "basketball": {
+        "avgPrice": 120,
+        "totalOrders": 1007
+      },
+      "training": {
+        "avgPrice": 122,
+        "totalOrders": 943
+      }
+    }
   },
   "jordan": {
     "avgPrice": 285,
     "totalOrders": 4103,
-    "topCategory": "Basketball"
+    "topCategory": "Basketball",
+    "byType": {
+      "basketball": {
+        "avgPrice": 285,
+        "totalOrders": 4103
+      }
+    }
   },
   "yeezy": {
     "avgPrice": 312,
     "totalOrders": 2847,
-    "topCategory": "Lifestyle"
+    "topCategory": "Lifestyle",
+    "byType": {
+      "lifestyle": {
+        "avgPrice": 312,
+        "totalOrders": 2847
+      }
+    }
   },
   "converse": {
     "avgPrice": 72,
     "totalOrders": 3614,
-    "topCategory": "Lifestyle"
+    "topCategory": "Lifestyle",
+    "byType": {
+      "lifestyle": {
+        "avgPrice": 72,
+        "totalOrders": 3614
+      }
+    }
   }
 }
