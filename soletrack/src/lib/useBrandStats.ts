@@ -9,8 +9,19 @@ type BrandStatsMap = Record<string, BrandStat>
 const BRAND_STATS_URL = '/data/brandStats.json'
 let statsPromise: Promise<BrandStatsMap> | null = null
 
+// Sub-brands not in the CSV — map to parent brand for market intel
+const BRAND_ALIASES: Record<string, string> = {
+  jordan: 'nike',
+  yeezy: 'adidas',
+  converse: 'nike',
+}
+
 function normalizeBrand(brand: string) {
   return brand.trim().toLowerCase()
+}
+
+function resolveKey(key: string): string {
+  return BRAND_ALIASES[key] ?? key
 }
 
 export async function loadBrandStats(): Promise<BrandStatsMap> {
@@ -28,7 +39,7 @@ export async function getBrandStat(brand: string): Promise<BrandStat | null> {
   const key = normalizeBrand(brand)
   if (!key) return null
   const stats = await loadBrandStats()
-  return stats[key] ?? null
+  return stats[resolveKey(key)] ?? null
 }
 
 export async function getDelta(listingPrice: number, brand: string): Promise<number | null> {

@@ -42,4 +42,21 @@ describe('useBrandStats', () => {
     await getDelta(160, 'Nike')
     expect(fetch).toHaveBeenCalledTimes(1)
   })
+
+  it('Jordan alias resolves to Nike stats', async () => {
+    await expect(getBrandStat('Jordan')).resolves.toEqual(MOCK_STATS.nike)
+  })
+
+  it('Yeezy alias resolves to Adidas stats', async () => {
+    await expect(getBrandStat('Yeezy')).resolves.toEqual(MOCK_STATS.adidas)
+  })
+
+  it('Converse alias resolves to Nike stats', async () => {
+    await expect(getBrandStat('Converse')).resolves.toEqual(MOCK_STATS.nike)
+  })
+
+  it('getDelta works for aliased brand Jordan', async () => {
+    // Jordan maps to Nike avg 187, 220 is 17.6% above
+    await expect(getDelta(220, 'Jordan')).resolves.toBe(17.6)
+  })
 })
